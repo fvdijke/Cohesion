@@ -1,0 +1,65 @@
+# COHESION
+
+**COHESION** is a suite of three original JUCE/VST3 audio plugins by **Pepperwood**,
+sharing one dark/teal house style and a consistent workflow. All DSP is original code.
+
+| Plugin | What it does |
+|--------|--------------|
+| **COHESION — GLUE** | Master-bus "glue" compressor for cohesion on the mix bus. |
+| **COHESION — EQ/COMP** | Parametric EQ (TPT/ZDF) + flexible multiband dynamics + brick-wall limiter, with an **ASSIST** engine that listens to the signal and proposes EQ/comp settings per instrument & style. |
+| **COHESION — ADT** | **Artificial Double Tracking** — the Abbey Road trick: a modulated, delayed double of a vocal to make it thicker and wider. |
+
+## Plugins
+
+### COHESION — ADT
+Artificial Double Tracking: a short modulated delay (≈15–35 ms, no feedback) with subtle
+LFO pitch-wobble, phase controls, and a WIDTH that separates the original and the double
+from centred (thickening) to hard left/right. Factory presets named after classic
+double-tracked vocals (Lennon Wide, Abbey Road '66, Tomorrow Never…, Elliott Smith, …).
+
+![COHESION - ADT](Cohesion-ADT/mockups/01-adt.svg)
+
+### COHESION — EQ/COMP
+6-band parametric EQ + HPF/LPF, 2–5 band multiband dynamics, output limiter, live
+before/after spectrum, and the ASSIST analysis engine.
+
+![COHESION - EQ/COMP · ASSIST](Cohesion-EQComp/mockups/03-assist.svg)
+
+### COHESION — GLUE
+Master-bus glue compressor (the first plugin of the suite).
+
+## Repository layout
+
+```
+COHESION/
+├─ Cohesion-Glue/     # COHESION - GLUE      (VST3 "Cohesion Glue")
+├─ Cohesion-EQComp/   # COHESION - EQ/COMP   (VST3 "Cohesion EQ-Comp")
+├─ Cohesion-ADT/      # COHESION - ADT       (VST3 "Cohesion ADT")
+├─ Cohesion-Synth/    # COHESION - SYNTH     (design mockups only, not yet built)
+└─ installer/         # Inno Setup script for the combined Windows installer
+```
+
+## Build
+
+Each plugin builds on its own with CMake; JUCE 7.0.12 is fetched automatically on the
+first configure (one plugin's fetched JUCE is reused by the others, so build one first).
+
+```bash
+cmake -S . -B build
+cmake --build build --config Release
+```
+
+Run this inside a plugin folder (e.g. `Cohesion-ADT`). The built `.vst3` lands in
+`build/<Target>_artefacts/Release/VST3/`. On Windows, copy it to
+`C:\Program Files\Common Files\VST3\`.
+
+## Installer
+
+A combined Windows installer is built from `installer/Cohesion.iss` with Inno Setup 6
+(`ISCC.exe installer/Cohesion.iss`). It lets you choose which plugin(s) to install and
+the location (defaults to the VST3 folder). Pre-built installers are attached to the
+[releases](../../releases).
+
+## License
+
+© Pepperwood. All rights reserved.

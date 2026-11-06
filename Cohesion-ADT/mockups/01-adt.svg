@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2f36"/><stop offset="1" stop-color="#15171b"/></linearGradient>
+    <radialGradient id="kg" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#3a4149"/><stop offset="1" stop-color="#1b1f24"/></radialGradient>
+    <symbol id="kn" overflow="visible">
+      <circle r="18" fill="url(#kg)" stroke="#11161b" stroke-width="2"/><circle r="18" fill="none" stroke="#2b3138"/>
+      <line x1="0" y1="0" x2="-9" y2="-14" stroke="#39ffb0" stroke-width="2.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="knm" overflow="visible">
+      <circle r="14" fill="url(#kg)" stroke="#11161b" stroke-width="2"/><circle r="14" fill="none" stroke="#2b3138"/>
+      <line x1="0" y1="0" x2="-7" y2="-11" stroke="#39ffb0" stroke-width="2.2" stroke-linecap="round"/>
+    </symbol>
+    <!-- a vocal-ish waveform centred on y=0, width ~660 -->
+    <symbol id="wave" overflow="visible">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
+        d="M0,0 L18,-6 L36,9 L54,-14 L72,20 L90,-24 L108,30 L126,-33 L144,34 L162,-30 L180,26 L198,-32 L216,36 L234,-28 L252,22 L270,-26 L288,31 L306,-34 L324,30 L342,-24 L360,27 L378,-30 L396,24 L414,-20 L432,16 L450,-22 L468,18 L486,-14 L504,12 L522,-16 L540,10 L558,-8 L576,9 L594,-6 L612,5 L630,-4 L648,3 L660,0"/>
+    </symbol>
+  </defs>
+
+  <rect x="0" y="0" width="980" height="560" rx="10" fill="url(#bg)"/>
+  <rect x="6" y="6" width="968" height="548" rx="8" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+
+  <!-- ===== header ===== -->
+  <text x="24" y="40" fill="#ffffff" font-size="18" font-weight="bold" letter-spacing="2.2">COHESION - ADT</text>
+  <text x="24" y="57" fill="#ffffff" fill-opacity="0.55" font-size="11" letter-spacing="1">by Pepperwood</text>
+  <text x="330" y="55" fill="#6c7a74" font-size="10" letter-spacing="1">Artificial Double Tracking</text>
+
+  <text x="640" y="24" fill="#9fb0aa" font-size="10" letter-spacing="1.4" text-anchor="middle">PRESET</text>
+  <rect x="500" y="30" width="24" height="30" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="512" y="50" fill="#9fe1cb" font-size="13" text-anchor="middle">&#8249;</text>
+  <rect x="528" y="30" width="200" height="30" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="628" y="50" fill="#eafff6" font-size="13" text-anchor="middle">Lennon Wide</text>
+  <rect x="732" y="30" width="24" height="30" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="744" y="50" fill="#9fe1cb" font-size="13" text-anchor="middle">&#8250;</text>
+  <rect x="762" y="30" width="30" height="30" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="777" y="50" fill="#9fe1cb" font-size="12" text-anchor="middle">&#128190;</text>
+  <text x="872" y="34" fill="#9fb0aa" font-size="11" letter-spacing="1.2" text-anchor="end">MENU</text>
+  <use href="#kn" x="916" y="37"/><text x="916" y="67" fill="#9fb0aa" font-size="9" text-anchor="middle">MIX</text>
+  <rect x="948" y="20" width="6" height="40" rx="2" fill="#0e1013"/><rect x="948" y="40" width="6" height="20" rx="2" fill="#39ffb0"/>
+
+  <!-- ===== visualizer ===== -->
+  <g transform="translate(12,74)">
+    <rect width="956" height="226" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="16" y="24" fill="#5dcaa5" font-size="10.5" font-weight="bold" letter-spacing="1.4">DOUBLE TRACKING</text>
+
+    <!-- lane labels -->
+    <text x="16" y="78" fill="#9fb0aa" font-size="10">ORIGINEEL</text>
+    <text x="16" y="168" fill="#9fb0aa" font-size="10">DUBBEL  (+24 ms, LFO)</text>
+
+    <!-- original waveform -->
+    <g color="#39ffb0" opacity="0.9"><use href="#wave" x="96" y="82"/></g>
+    <!-- doubled waveform: delayed (shifted right) + wobbled, different colour -->
+    <g color="#5ad0ff" opacity="0.8"><use href="#wave" x="120" y="172"/></g>
+    <!-- LFO wobble overlay on the double -->
+    <path d="M120,150 C170,142 210,158 260,150 C310,142 350,158 400,150 C450,142 490,158 540,150 C590,142 630,158 680,150 C730,146 760,152 780,150"
+          fill="none" stroke="#5ad0ff" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="3 3"/>
+
+    <!-- delay bracket between onsets (96 -> 120) -->
+    <line x1="96" y1="40" x2="96" y2="196" stroke="#ffffff" stroke-opacity="0.12" stroke-dasharray="3 3"/>
+    <line x1="120" y1="40" x2="120" y2="196" stroke="#5ad0ff" stroke-opacity="0.4" stroke-dasharray="3 3"/>
+    <path d="M96,36 L120,36" stroke="#9fe1cb" stroke-width="1"/>
+    <rect x="86" y="24" width="44" height="14" rx="3" fill="#15181c"/><text x="108" y="35" fill="#9fe1cb" font-size="9" text-anchor="middle">24 ms</text>
+
+    <!-- stereo width fan (right) -->
+    <g transform="translate(870,120)">
+      <text x="0" y="-78" fill="#9fb0aa" font-size="10" text-anchor="middle">WIDTH</text>
+      <path d="M0,60 L-66,-40 A 80 80 0 0 1 66,-40 Z" fill="#39ffb0" fill-opacity="0.08"/>
+      <line x1="0" y1="60" x2="-66" y2="-40" stroke="#39ffb0" stroke-opacity="0.5"/>
+      <line x1="0" y1="60" x2="66" y2="-40" stroke="#39ffb0" stroke-opacity="0.5"/>
+      <line x1="0" y1="60" x2="0" y2="-46" stroke="#ffffff" stroke-opacity="0.12" stroke-dasharray="3 3"/>
+      <text x="-62" y="-46" fill="#5ad0ff" font-size="10" text-anchor="middle">L</text>
+      <text x="62" y="-46" fill="#b08fd8" font-size="10" text-anchor="middle">R</text>
+      <text x="0" y="22" fill="#eafff6" font-size="13" font-weight="bold" text-anchor="middle">140%</text>
+    </g>
+  </g>
+
+  <!-- ===== control panels ===== -->
+  <!-- DOUBLE -->
+  <g transform="translate(12,312)">
+    <rect width="183" height="234" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="16" cy="20" r="5" fill="#39ffb0"/><text x="30" y="24" fill="#e8eef0" font-size="12" font-weight="bold" letter-spacing="1">DOUBLE</text>
+    <g text-anchor="middle">
+      <use href="#kn" x="60" y="78"/><text x="60" y="110" fill="#9fb0aa" font-size="9">DELAY</text><text x="60" y="122" fill="#9fe1cb" font-size="9">24 ms</text>
+      <use href="#kn" x="128" y="78"/><text x="128" y="110" fill="#9fb0aa" font-size="9">SPREAD</text><text x="128" y="122" fill="#9fe1cb" font-size="9">60%</text>
+      <use href="#kn" x="60" y="168"/><text x="60" y="200" fill="#9fb0aa" font-size="9">DETUNE</text><text x="60" y="212" fill="#9fe1cb" font-size="9">8 ct</text>
+    </g>
+    <text x="100" y="150" fill="#6c7a74" font-size="9" text-anchor="middle">VOICES</text>
+    <rect x="100" y="158" width="34" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="117" y="173" fill="#9fb0aa" font-size="10" text-anchor="middle">1</text>
+    <rect x="138" y="158" width="34" height="22" rx="4" fill="#0f6e56"/><text x="155" y="173" fill="#eafff6" font-size="10" text-anchor="middle">2</text>
+  </g>
+
+  <!-- MODULATION -->
+  <g transform="translate(203,312)">
+    <rect width="183" height="234" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="16" cy="20" r="5" fill="#39ffb0"/><text x="30" y="24" fill="#e8eef0" font-size="12" font-weight="bold" letter-spacing="1">MODULATION</text>
+    <g text-anchor="middle">
+      <use href="#kn" x="60" y="78"/><text x="60" y="110" fill="#9fb0aa" font-size="9">RATE</text><text x="60" y="122" fill="#9fe1cb" font-size="9">0.8 Hz</text>
+      <use href="#kn" x="128" y="78"/><text x="128" y="110" fill="#9fb0aa" font-size="9">DEPTH</text><text x="128" y="122" fill="#9fe1cb" font-size="9">35%</text>
+      <use href="#kn" x="60" y="168"/><text x="60" y="200" fill="#9fb0aa" font-size="9">HUMANIZE</text><text x="60" y="212" fill="#9fe1cb" font-size="9">20%</text>
+    </g>
+    <text x="128" y="150" fill="#6c7a74" font-size="9" text-anchor="middle">SHAPE</text>
+    <rect x="98" y="158" width="74" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="135" y="173" fill="#9fe1cb" font-size="10" text-anchor="middle">Sine &#9662;</text>
+  </g>
+
+  <!-- PHASE -->
+  <g transform="translate(394,312)">
+    <rect width="183" height="234" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="16" cy="20" r="5" fill="#39ffb0"/><text x="30" y="24" fill="#e8eef0" font-size="12" font-weight="bold" letter-spacing="1">PHASE</text>
+    <g text-anchor="middle">
+      <use href="#kn" x="60" y="82"/><text x="60" y="114" fill="#9fb0aa" font-size="9">ROTATE</text><text x="60" y="126" fill="#9fe1cb" font-size="9">+30&#176;</text>
+      <use href="#kn" x="128" y="82"/><text x="128" y="114" fill="#9fb0aa" font-size="9">ALIGN</text><text x="128" y="126" fill="#9fe1cb" font-size="9">auto</text>
+    </g>
+    <rect x="24" y="160" width="64" height="24" rx="5" fill="#0f6e56"/><text x="56" y="177" fill="#eafff6" font-size="10" text-anchor="middle">CORRECT</text>
+    <rect x="96" y="160" width="64" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="128" y="177" fill="#9fb0aa" font-size="10" text-anchor="middle">INVERT &#216;</text>
+  </g>
+
+  <!-- WIDTH -->
+  <g transform="translate(585,312)">
+    <rect width="183" height="234" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="16" cy="20" r="5" fill="#39ffb0"/><text x="30" y="24" fill="#e8eef0" font-size="12" font-weight="bold" letter-spacing="1">WIDTH</text>
+    <g text-anchor="middle">
+      <use href="#kn" x="60" y="80"/><text x="60" y="112" fill="#9fb0aa" font-size="9">WIDTH</text><text x="60" y="124" fill="#9fe1cb" font-size="9">140%</text>
+      <use href="#kn" x="128" y="80"/><text x="128" y="112" fill="#9fb0aa" font-size="9">LOW MONO</text><text x="128" y="124" fill="#9fe1cb" font-size="9">120 Hz</text>
+    </g>
+    <text x="30" y="155" fill="#6c7a74" font-size="9">MONO &#8596; WIDE</text>
+    <rect x="24" y="162" width="136" height="6" rx="3" fill="#13181d"/><rect x="24" y="162" width="96" height="6" rx="3" fill="#39ffb0"/><circle cx="120" cy="165" r="7" fill="#3a4149" stroke="#11161b"/>
+    <rect x="24" y="186" width="136" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><circle cx="38" cy="198" r="4" fill="#39ffb0"/><text x="96" y="203" fill="#9fb0aa" font-size="10" text-anchor="middle">BASS MONO</text>
+  </g>
+
+  <!-- MIX / OUT -->
+  <g transform="translate(776,312)">
+    <rect width="183" height="234" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="16" cy="20" r="5" fill="#39ffb0"/><text x="30" y="24" fill="#e8eef0" font-size="12" font-weight="bold" letter-spacing="1">OUTPUT</text>
+    <g text-anchor="middle">
+      <use href="#kn" x="60" y="80"/><text x="60" y="112" fill="#9fb0aa" font-size="9">DRY / WET</text><text x="60" y="124" fill="#9fe1cb" font-size="9">70%</text>
+      <use href="#kn" x="128" y="80"/><text x="128" y="112" fill="#9fb0aa" font-size="9">OUTPUT</text><text x="128" y="124" fill="#9fe1cb" font-size="9">0.0 dB</text>
+    </g>
+    <rect x="24" y="160" width="64" height="24" rx="5" fill="#0f6e56"/><text x="56" y="177" fill="#eafff6" font-size="10" text-anchor="middle">VINTAGE</text>
+    <rect x="96" y="160" width="64" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="128" y="177" fill="#9fb0aa" font-size="10" text-anchor="middle">MONO</text>
+    <!-- output meter -->
+    <rect x="24" y="196" width="136" height="8" rx="4" fill="#13181d"/><rect x="24" y="196" width="104" height="8" rx="4" fill="#39ffb0"/>
+  </g>
+
+  <text x="490" y="554" fill="#6c7a74" font-size="9" text-anchor="middle">COHESION - ADT · Artificial Double Tracking · mockup (huisstijl)</text>
+</svg>

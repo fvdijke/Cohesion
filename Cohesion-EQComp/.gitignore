@@ -1,0 +1,15 @@
+# Build output
+build/
+*.vst3
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.obj
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vs/
+*.user

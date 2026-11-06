@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2f36"/><stop offset="1" stop-color="#15171b"/></linearGradient>
+  </defs>
+  <rect x="0" y="0" width="980" height="640" rx="10" fill="url(#bg)"/>
+  <rect x="6" y="6" width="968" height="628" rx="8" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+
+  <!-- header -->
+  <text x="22" y="40" fill="#ffffff" font-size="18" font-weight="bold" letter-spacing="2.2">COHESION - EQ/COMP</text>
+  <text x="22" y="57" fill="#ffffff" fill-opacity="0.55" font-size="11" letter-spacing="1">by Pepperwood</text>
+  <g font-size="12" font-weight="bold" letter-spacing="1" text-anchor="middle">
+    <rect x="305" y="26" width="118" height="30" rx="6" fill="#0e1013" stroke="#2b3138"/><text x="364" y="46" fill="#9fb0aa">EQ</text>
+    <rect x="431" y="26" width="118" height="30" rx="6" fill="#0f6e56"/><text x="490" y="46" fill="#eafff6">MULTIBAND</text>
+    <rect x="557" y="26" width="118" height="30" rx="6" fill="#0e1013" stroke="#2b3138"/><text x="616" y="46" fill="#9fb0aa">ASSIST</text>
+  </g>
+  <!-- right: BANDS + ON -->
+  <text x="724" y="45" fill="#9fb0aa" font-size="10" letter-spacing="1" text-anchor="end">BANDS</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="732" y="28" width="26" height="26" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="745" y="46" fill="#9fb0aa">2</text>
+    <rect x="760" y="28" width="26" height="26" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="773" y="46" fill="#9fb0aa">3</text>
+    <rect x="788" y="28" width="26" height="26" rx="5" fill="#0f6e56"/><text x="801" y="46" fill="#eafff6">4</text>
+    <rect x="816" y="28" width="26" height="26" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="829" y="46" fill="#9fb0aa">5</text>
+  </g>
+  <rect x="896" y="28" width="54" height="26" rx="6" fill="#0f6e56"/><text x="923" y="46" fill="#eafff6" font-size="11" font-weight="bold" text-anchor="middle">ON</text>
+
+  <!-- ===== crossover scope ===== -->
+  <g transform="translate(8,72)">
+    <rect width="964" height="228" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <!-- band regions (coloured) -->
+    <rect x="12" y="12" width="230" height="204" fill="#c98a5a" fill-opacity="0.08"/>
+    <rect x="242" y="12" width="250" height="204" fill="#cabf63" fill-opacity="0.08"/>
+    <rect x="492" y="12" width="250" height="204" fill="#6fc88a" fill-opacity="0.08"/>
+    <rect x="742" y="12" width="210" height="204" fill="#5aa6d8" fill-opacity="0.08"/>
+    <!-- spectrum -->
+    <path d="M12,200 C120,150 220,120 340,130 C460,140 560,170 680,180 C800,190 900,196 952,200 L952,216 L12,216 Z" fill="#39ffb0" fill-opacity="0.14"/>
+    <!-- crossover lines -->
+    <g stroke="#39ffb0" stroke-opacity="0.55" stroke-dasharray="5 4" stroke-width="1.2">
+      <line x1="242" y1="12" x2="242" y2="216"/><line x1="492" y1="12" x2="492" y2="216"/><line x1="742" y1="12" x2="742" y2="216"/>
+    </g>
+    <!-- threshold lines (per band) -->
+    <g stroke-width="1.4" stroke-opacity="0.75">
+      <line x1="18" y1="110" x2="236" y2="110" stroke="#39ffb0"/><line x1="248" y1="96" x2="486" y2="96" stroke="#39ffb0"/>
+      <line x1="498" y1="120" x2="736" y2="120" stroke="#39ffb0"/><line x1="748" y1="104" x2="946" y2="104" stroke="#39ffb0"/>
+    </g>
+    <!-- freq labels -->
+    <rect x="212" y="200" width="60" height="14" rx="3" fill="#15181c"/><text x="242" y="211" fill="#9fe1cb" font-size="9" text-anchor="middle">150 Hz</text>
+    <rect x="462" y="200" width="60" height="14" rx="3" fill="#15181c"/><text x="492" y="211" fill="#9fe1cb" font-size="9" text-anchor="middle">700 Hz</text>
+    <rect x="712" y="200" width="60" height="14" rx="3" fill="#15181c"/><text x="742" y="211" fill="#9fe1cb" font-size="9" text-anchor="middle">3.0 kHz</text>
+    <!-- band numbers -->
+    <text x="127" y="30" fill="#c98a5a" font-size="14" font-weight="bold" text-anchor="middle">1</text>
+    <text x="367" y="30" fill="#cabf63" font-size="14" font-weight="bold" text-anchor="middle">2</text>
+    <text x="617" y="30" fill="#6fc88a" font-size="14" font-weight="bold" text-anchor="middle">3</text>
+    <text x="847" y="30" fill="#5aa6d8" font-size="14" font-weight="bold" text-anchor="middle">4</text>
+  </g>
+
+  <!-- ===== band columns ===== -->
+  <!-- column template ×4 -->
+  <!-- band 1 -->
+  <g transform="translate(8,308)">
+    <rect width="235" height="320" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="18" cy="20" r="5" fill="#c98a5a"/><text x="32" y="24" fill="#c98a5a" font-size="12" font-weight="bold">BAND 1</text>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="34" width="68" height="22" rx="4" fill="#0f2a22" stroke="#c98a5a"/><text x="48" y="49" fill="#eafff6">COMP</text>
+      <rect x="84" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="118" y="49" fill="#9fb0aa">EXP</text>
+      <rect x="154" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="188" y="49" fill="#9fb0aa">GATE</text>
+    </g>
+    <!-- sliders -->
+    <g>
+      <g transform="translate(26,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="40" width="8" height="110" rx="4" fill="#c98a5a"/><circle cx="0" cy="40" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(60,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="70" width="8" height="80" rx="4" fill="#c98a5a"/><circle cx="0" cy="70" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(94,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="90" width="8" height="60" rx="4" fill="#c98a5a"/><circle cx="0" cy="90" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(128,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="55" width="8" height="95" rx="4" fill="#c98a5a"/><circle cx="0" cy="55" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(162,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="100" width="8" height="50" rx="4" fill="#c98a5a"/><circle cx="0" cy="100" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(196,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="80" width="8" height="70" rx="4" fill="#c98a5a"/><circle cx="0" cy="80" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g font-size="8" text-anchor="middle" fill="#9fb0aa"><text x="26" y="234">THR</text><text x="60" y="234">RAT</text><text x="94" y="234">ATK</text><text x="128" y="234">REL</text><text x="162" y="234">WID</text><text x="196" y="234">GN</text></g>
+    </g>
+    <!-- GR meter -->
+    <text x="14" y="258" fill="#6c7a74" font-size="8">GR</text>
+    <rect x="34" y="250" width="188" height="8" rx="4" fill="#13181d"/><rect x="34" y="250" width="70" height="8" rx="4" fill="#c98a5a"/>
+    <!-- S M B -->
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="47" y="298" fill="#9fb0aa">SOLO</text>
+      <rect x="84" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="117" y="298" fill="#9fb0aa">MUTE</text>
+      <rect x="156" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="189" y="298" fill="#9fb0aa">BYP</text>
+    </g>
+  </g>
+
+  <!-- band 2 -->
+  <g transform="translate(249,308)">
+    <rect width="235" height="320" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="18" cy="20" r="5" fill="#cabf63"/><text x="32" y="24" fill="#cabf63" font-size="12" font-weight="bold">BAND 2</text>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="34" width="68" height="22" rx="4" fill="#0f2a22" stroke="#cabf63"/><text x="48" y="49" fill="#eafff6">COMP</text>
+      <rect x="84" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="118" y="49" fill="#9fb0aa">EXP</text>
+      <rect x="154" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="188" y="49" fill="#9fb0aa">GATE</text>
+    </g>
+    <g>
+      <g transform="translate(26,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="30" width="8" height="120" rx="4" fill="#cabf63"/><circle cx="0" cy="30" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(60,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="60" width="8" height="90" rx="4" fill="#cabf63"/><circle cx="0" cy="60" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(94,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="100" width="8" height="50" rx="4" fill="#cabf63"/><circle cx="0" cy="100" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(128,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="48" width="8" height="102" rx="4" fill="#cabf63"/><circle cx="0" cy="48" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(162,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="92" width="8" height="58" rx="4" fill="#cabf63"/><circle cx="0" cy="92" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(196,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="75" width="8" height="75" rx="4" fill="#cabf63"/><circle cx="0" cy="75" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g font-size="8" text-anchor="middle" fill="#9fb0aa"><text x="26" y="234">THR</text><text x="60" y="234">RAT</text><text x="94" y="234">ATK</text><text x="128" y="234">REL</text><text x="162" y="234">WID</text><text x="196" y="234">GN</text></g>
+    </g>
+    <text x="14" y="258" fill="#6c7a74" font-size="8">GR</text>
+    <rect x="34" y="250" width="188" height="8" rx="4" fill="#13181d"/><rect x="34" y="250" width="110" height="8" rx="4" fill="#cabf63"/>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="47" y="298" fill="#9fb0aa">SOLO</text>
+      <rect x="84" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="117" y="298" fill="#9fb0aa">MUTE</text>
+      <rect x="156" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="189" y="298" fill="#9fb0aa">BYP</text>
+    </g>
+  </g>
+
+  <!-- band 3 -->
+  <g transform="translate(490,308)">
+    <rect width="235" height="320" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="18" cy="20" r="5" fill="#6fc88a"/><text x="32" y="24" fill="#6fc88a" font-size="12" font-weight="bold">BAND 3</text>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="48" y="49" fill="#9fb0aa">COMP</text>
+      <rect x="84" y="34" width="68" height="22" rx="4" fill="#0f2a22" stroke="#6fc88a"/><text x="118" y="49" fill="#eafff6">EXP</text>
+      <rect x="154" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="188" y="49" fill="#9fb0aa">GATE</text>
+    </g>
+    <g>
+      <g transform="translate(26,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="50" width="8" height="100" rx="4" fill="#6fc88a"/><circle cx="0" cy="50" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(60,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="80" width="8" height="70" rx="4" fill="#6fc88a"/><circle cx="0" cy="80" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(94,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="110" width="8" height="40" rx="4" fill="#6fc88a"/><circle cx="0" cy="110" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(128,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="60" width="8" height="90" rx="4" fill="#6fc88a"/><circle cx="0" cy="60" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(162,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="105" width="8" height="45" rx="4" fill="#6fc88a"/><circle cx="0" cy="105" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(196,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="85" width="8" height="65" rx="4" fill="#6fc88a"/><circle cx="0" cy="85" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g font-size="8" text-anchor="middle" fill="#9fb0aa"><text x="26" y="234">THR</text><text x="60" y="234">RAT</text><text x="94" y="234">ATK</text><text x="128" y="234">REL</text><text x="162" y="234">WID</text><text x="196" y="234">GN</text></g>
+    </g>
+    <text x="14" y="258" fill="#6c7a74" font-size="8">GR</text>
+    <rect x="34" y="250" width="188" height="8" rx="4" fill="#13181d"/><rect x="34" y="250" width="48" height="8" rx="4" fill="#6fc88a"/>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="47" y="298" fill="#9fb0aa">SOLO</text>
+      <rect x="84" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="117" y="298" fill="#9fb0aa">MUTE</text>
+      <rect x="156" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="189" y="298" fill="#9fb0aa">BYP</text>
+    </g>
+  </g>
+
+  <!-- band 4 -->
+  <g transform="translate(731,308)">
+    <rect width="235" height="320" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <circle cx="18" cy="20" r="5" fill="#5aa6d8"/><text x="32" y="24" fill="#5aa6d8" font-size="12" font-weight="bold">BAND 4</text>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="34" width="68" height="22" rx="4" fill="#0f2a22" stroke="#5aa6d8"/><text x="48" y="49" fill="#eafff6">COMP</text>
+      <rect x="84" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="118" y="49" fill="#9fb0aa">EXP</text>
+      <rect x="154" y="34" width="68" height="22" rx="4" fill="#0e1013" stroke="#2b3138"/><text x="188" y="49" fill="#9fb0aa">GATE</text>
+    </g>
+    <g>
+      <g transform="translate(26,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="45" width="8" height="105" rx="4" fill="#5aa6d8"/><circle cx="0" cy="45" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(60,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="65" width="8" height="85" rx="4" fill="#5aa6d8"/><circle cx="0" cy="65" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(94,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="95" width="8" height="55" rx="4" fill="#5aa6d8"/><circle cx="0" cy="95" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(128,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="52" width="8" height="98" rx="4" fill="#5aa6d8"/><circle cx="0" cy="52" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(162,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="98" width="8" height="52" rx="4" fill="#5aa6d8"/><circle cx="0" cy="98" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g transform="translate(196,70)"><rect x="-4" y="0" width="8" height="150" rx="4" fill="#13181d"/><rect x="-4" y="78" width="8" height="72" rx="4" fill="#5aa6d8"/><circle cx="0" cy="78" r="6" fill="#3a4149" stroke="#11161b"/></g>
+      <g font-size="8" text-anchor="middle" fill="#9fb0aa"><text x="26" y="234">THR</text><text x="60" y="234">RAT</text><text x="94" y="234">ATK</text><text x="128" y="234">REL</text><text x="162" y="234">WID</text><text x="196" y="234">GN</text></g>
+    </g>
+    <text x="14" y="258" fill="#6c7a74" font-size="8">GR</text>
+    <rect x="34" y="250" width="188" height="8" rx="4" fill="#13181d"/><rect x="34" y="250" width="92" height="8" rx="4" fill="#5aa6d8"/>
+    <g font-size="9" text-anchor="middle">
+      <rect x="14" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="47" y="298" fill="#9fb0aa">SOLO</text>
+      <rect x="84" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="117" y="298" fill="#9fb0aa">MUTE</text>
+      <rect x="156" y="282" width="66" height="24" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="189" y="298" fill="#9fb0aa">BYP</text>
+    </g>
+  </g>
+
+  <circle cx="952" cy="612" r="14" fill="#15181c" stroke="#0f6e56" stroke-width="1.6"/><text x="952" y="617" fill="#9fe1cb" font-size="15" font-weight="bold" text-anchor="middle">?</text>
+</svg>

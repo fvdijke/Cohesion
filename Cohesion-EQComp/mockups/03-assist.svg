@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2f36"/><stop offset="1" stop-color="#15171b"/></linearGradient>
+    <radialGradient id="kg" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stop-color="#3a4149"/><stop offset="1" stop-color="#1b1f24"/></radialGradient>
+  </defs>
+  <rect x="0" y="0" width="980" height="640" rx="10" fill="url(#bg)"/>
+  <rect x="6" y="6" width="968" height="628" rx="8" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+
+  <!-- header -->
+  <text x="22" y="40" fill="#ffffff" font-size="18" font-weight="bold" letter-spacing="2.2">COHESION - EQ/COMP</text>
+  <text x="22" y="57" fill="#ffffff" fill-opacity="0.55" font-size="11" letter-spacing="1">by Pepperwood</text>
+  <g font-size="12" font-weight="bold" letter-spacing="1" text-anchor="middle">
+    <rect x="305" y="26" width="118" height="30" rx="6" fill="#0e1013" stroke="#2b3138"/><text x="364" y="46" fill="#9fb0aa">EQ</text>
+    <rect x="431" y="26" width="118" height="30" rx="6" fill="#0e1013" stroke="#2b3138"/><text x="490" y="46" fill="#9fb0aa">MULTIBAND</text>
+    <rect x="557" y="26" width="118" height="30" rx="6" fill="#0f6e56"/><text x="616" y="46" fill="#eafff6">ASSIST</text>
+  </g>
+
+  <!-- ===== TARGET panel ===== -->
+  <g transform="translate(8,70)">
+    <rect width="250" height="556" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="16" y="28" fill="#5dcaa5" font-size="10.5" font-weight="bold" letter-spacing="1.4">TARGET</text>
+    <text x="16" y="52" fill="#9fb0aa" font-size="11">Instrument</text>
+    <rect x="16" y="58" width="218" height="28" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="28" y="77" fill="#eafff6" font-size="12">Master</text><text x="222" y="77" fill="#9fe1cb" font-size="11" text-anchor="end">&#9662;</text>
+    <text x="16" y="108" fill="#9fb0aa" font-size="11">Style</text>
+    <rect x="16" y="114" width="218" height="28" rx="5" fill="#0e1013" stroke="#2b3138"/><text x="28" y="133" fill="#eafff6" font-size="12">Bright / air</text><text x="222" y="133" fill="#9fe1cb" font-size="11" text-anchor="end">&#9662;</text>
+    <!-- circular LISTEN -->
+    <g transform="translate(125,214)">
+      <circle r="52" fill="#0f241d"/><circle r="52" fill="none" stroke="#0f6e56" stroke-width="2"/>
+      <path d="M 0 -52 A 52 52 0 1 1 -40 33" fill="none" stroke="#39ffb0" stroke-width="3" stroke-linecap="round"/>
+      <text x="0" y="-2" fill="#eafff6" font-size="15" font-weight="bold" text-anchor="middle">LISTEN</text>
+      <text x="0" y="14" fill="#9fe1cb" font-size="9" text-anchor="middle">analysing 78%</text>
+    </g>
+    <!-- strength -->
+    <text x="16" y="300" fill="#9fb0aa" font-size="11">Strength</text>
+    <text x="234" y="300" fill="#9fe1cb" font-size="11" text-anchor="end">88 %</text>
+    <rect x="16" y="310" width="218" height="4" rx="2" fill="#13181d"/><rect x="16" y="310" width="192" height="4" rx="2" fill="#39ffb0"/><circle cx="208" cy="312" r="7" fill="#3a4149" stroke="#11161b"/>
+    <!-- toepassen op -->
+    <text x="16" y="342" fill="#9fb0aa" font-size="11">Toepassen op</text>
+    <rect x="16" y="350" width="105" height="28" rx="6" fill="#12201b" stroke="#0f6e56"/><circle cx="32" cy="364" r="5" fill="#39ffb0"/><text x="74" y="369" fill="#eafff6" font-size="11" text-anchor="middle">EQ</text>
+    <rect x="129" y="350" width="105" height="28" rx="6" fill="#12201b" stroke="#0f6e56"/><circle cx="145" cy="364" r="5" fill="#39ffb0"/><text x="188" y="369" fill="#eafff6" font-size="11" text-anchor="middle">Comp</text>
+    <!-- apply / preview / revert -->
+    <rect x="16" y="392" width="218" height="34" rx="6" fill="#39ffb0"/><text x="125" y="414" fill="#07130f" font-size="13" font-weight="bold" text-anchor="middle">APPLY</text>
+    <rect x="16" y="434" width="105" height="28" rx="6" fill="#0e1013" stroke="#2b3138"/><text x="68" y="453" fill="#9fe1cb" font-size="11" text-anchor="middle">Preview</text>
+    <rect x="129" y="434" width="105" height="28" rx="6" fill="#0e1013" stroke="#2b3138"/><text x="181" y="453" fill="#9fe1cb" font-size="11" text-anchor="middle">Revert</text>
+  </g>
+
+  <!-- ===== graph ===== -->
+  <g transform="translate(266,70)">
+    <rect width="468" height="556" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <!-- grid -->
+    <g stroke="#ffffff" stroke-opacity="0.05">
+      <line x1="12" y1="149" x2="456" y2="149"/><line x1="12" y1="278" x2="456" y2="278"/><line x1="12" y1="407" x2="456" y2="407"/>
+    </g>
+    <!-- problem zones (coloured, matching cards) -->
+    <rect x="44" y="12" width="36" height="520" fill="#c98a5a" fill-opacity="0.10"/>
+    <rect x="300" y="12" width="36" height="520" fill="#cabf63" fill-opacity="0.10"/>
+    <rect x="150" y="12" width="36" height="520" fill="#6fc88a" fill-opacity="0.10"/>
+    <!-- current spectrum (grey) hidden after analysis; measured curve -->
+    <path d="M12,360 C80,350 140,330 200,300 C260,280 320,300 380,320 C420,335 440,345 456,350" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1.4"/>
+    <!-- target dashed -->
+    <path d="M12,300 C90,296 150,292 210,286 C280,280 330,276 380,272 C420,270 440,268 456,268" fill="none" stroke="#9fe1cb" stroke-opacity="0.6" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <!-- proposal (teal, smooth) -->
+    <path d="M12,330 C70,320 120,230 180,250 C230,266 270,320 320,300 C370,282 410,250 456,250" fill="none" stroke="#39ffb0" stroke-width="2.4"/>
+    <!-- coloured nodes -->
+    <circle cx="62" cy="300" r="7" fill="#c98a5a" stroke="#c98a5a" stroke-width="2"/>
+    <circle cx="168" cy="250" r="7" fill="#6fc88a" stroke="#6fc88a" stroke-width="2"/>
+    <circle cx="318" cy="300" r="7" fill="#cabf63" stroke="#cabf63" stroke-width="2"/>
+    <!-- legend -->
+    <g>
+      <rect x="18" y="18" width="168" height="58" rx="5" fill="#15181c" stroke="#ffffff" stroke-opacity="0.08"/>
+      <rect x="28" y="31" width="20" height="2" fill="#ffffff" fill-opacity="0.4"/><text x="54" y="36" fill="#9fb0aa" font-size="9.5">huidig signaal</text>
+      <line x1="28" y1="49" x2="48" y2="49" stroke="#9fe1cb" stroke-width="1.6" stroke-dasharray="4 3"/><text x="54" y="53" fill="#9fb0aa" font-size="9.5">doelcurve (Master)</text>
+      <rect x="28" y="65" width="20" height="2" fill="#39ffb0"/><text x="54" y="70" fill="#9fb0aa" font-size="9.5">voorstel</text>
+    </g>
+    <!-- freq axis -->
+    <g fill="#6c7a74" font-size="9" text-anchor="middle"><text x="20" y="548">20</text><text x="150" y="548">200</text><text x="250" y="548">1k</text><text x="360" y="548">5k</text><text x="452" y="548">20k</text></g>
+  </g>
+
+  <!-- ===== VOORSTEL ===== -->
+  <g transform="translate(742,70)">
+    <rect width="230" height="556" rx="7" fill="#0d0f12" stroke="#ffffff" stroke-opacity="0.08"/>
+    <text x="14" y="26" fill="#5dcaa5" font-size="10.5" font-weight="bold" letter-spacing="1.4">VOORSTEL</text>
+    <!-- eq cards coloured -->
+    <g>
+      <rect x="12" y="34" width="206" height="44" rx="5" fill="#12201b" stroke="#c98a5a"/><circle cx="24" cy="51" r="4" fill="#c98a5a"/><text x="36" y="51" fill="#eafff6" font-size="11" font-weight="bold">EQ – Low dip</text><text x="36" y="68" fill="#9fb0aa" font-size="10">-4.2 dB @ 60 Hz  ·  Q 1.2</text>
+      <rect x="12" y="86" width="206" height="44" rx="5" fill="#12201b" stroke="#cabf63"/><circle cx="24" cy="103" r="4" fill="#cabf63"/><text x="36" y="103" fill="#eafff6" font-size="11" font-weight="bold">EQ – High lift</text><text x="36" y="120" fill="#9fb0aa" font-size="10">+3.1 dB @ 8.0 kHz  ·  Q 1.2</text>
+      <rect x="12" y="138" width="206" height="44" rx="5" fill="#12201b" stroke="#6fc88a"/><circle cx="24" cy="155" r="4" fill="#6fc88a"/><text x="36" y="155" fill="#eafff6" font-size="11" font-weight="bold">EQ – Mid dip</text><text x="36" y="172" fill="#9fb0aa" font-size="10">-2.6 dB @ 1.0 kHz  ·  Q 1.2</text>
+      <rect x="12" y="190" width="206" height="44" rx="5" fill="#12201b" stroke="#9fe1cb"/><circle cx="24" cy="207" r="4" fill="#9fe1cb"/><text x="36" y="207" fill="#eafff6" font-size="11" font-weight="bold">EQ – HPF</text><text x="36" y="224" fill="#9fb0aa" font-size="10">HPF 20 Hz (sub opruimen)</text>
+    </g>
+    <!-- COMP section -->
+    <text x="14" y="258" fill="#5dcaa5" font-size="10" font-weight="bold" letter-spacing="1.2">COMP</text>
+    <rect x="12" y="266" width="206" height="56" rx="5" fill="#12201b" stroke="#39ffb0"/><circle cx="24" cy="285" r="4" fill="#39ffb0"/><text x="36" y="285" fill="#eafff6" font-size="11" font-weight="bold">Master-glue</text><text x="36" y="302" fill="#9fb0aa" font-size="10">Comp 1.8:1 - Thr -20 dB</text><text x="36" y="316" fill="#9fb0aa" font-size="10">Att 30 ms - Rel 200 ms</text>
+    <rect x="12" y="330" width="206" height="44" rx="5" fill="#12201b" stroke="#39ffb0"/><circle cx="24" cy="347" r="4" fill="#39ffb0"/><text x="36" y="347" fill="#eafff6" font-size="11" font-weight="bold">Limiter</text><text x="36" y="364" fill="#9fb0aa" font-size="10">Ceiling -0.3 dB (max loudness)</text>
+    <!-- note -->
+    <text x="14" y="520" fill="#6c7a74" font-size="9.5">APPLY zet het voorstel op de EQ- en</text>
+    <text x="14" y="534" fill="#6c7a74" font-size="9.5">MULTIBAND-schermen. Preview vergelijkt.</text>
+    <text x="14" y="548" fill="#6c7a74" font-size="9.5">Revert zet terug.</text>
+  </g>
+
+  <!-- help button -->
+  <circle cx="952" cy="612" r="14" fill="#15181c" stroke="#0f6e56" stroke-width="1.6"/><text x="952" y="617" fill="#9fe1cb" font-size="15" font-weight="bold" text-anchor="middle">?</text>
+</svg>
