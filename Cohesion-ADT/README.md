@@ -18,7 +18,7 @@ doubled with a short modulated delay so a single vocal sounds thicker and wider.
 - A live, flowing before/after waveform display and a set of factory presets named
   after famous double-tracked vocals.
 
-![COHESION - ADT](mockups/01-adt.svg)
+<img src="screenshots/adt.png" width="860" height="520" alt="COHESION - ADT">
 
 ## Build
 

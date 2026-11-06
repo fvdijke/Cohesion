@@ -17,16 +17,18 @@ LFO pitch-wobble, phase controls, and a WIDTH that separates the original and th
 from centred (thickening) to hard left/right. Factory presets named after classic
 double-tracked vocals (Lennon Wide, Abbey Road '66, Tomorrow Never…, Elliott Smith, …).
 
-![COHESION - ADT](Cohesion-ADT/mockups/01-adt.svg)
+<img src="Cohesion-ADT/screenshots/adt.png" width="860" height="520" alt="COHESION - ADT">
 
 ### COHESION — EQ/COMP
 6-band parametric EQ + HPF/LPF, 2–5 band multiband dynamics, output limiter, live
 before/after spectrum, and the ASSIST analysis engine.
 
-![COHESION - EQ/COMP · ASSIST](Cohesion-EQComp/mockups/03-assist.svg)
+<img src="Cohesion-EQComp/screenshots/assist.png" width="860" height="520" alt="COHESION - EQ/COMP">
 
 ### COHESION — GLUE
 Master-bus glue compressor (the first plugin of the suite).
+
+<img src="Cohesion-Glue/screenshots/glue.png" width="860" height="520" alt="COHESION - GLUE">
 
 ## Repository layout
 

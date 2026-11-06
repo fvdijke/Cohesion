@@ -6,6 +6,8 @@ A master-bus **glue compressor**: gentle, musical bus compression (with oversamp
 a lookahead limiter) to pull a mix together. This is the first plugin of the suite and
 set the shared dark/teal house style.
 
+<img src="screenshots/glue.png" width="860" height="520" alt="COHESION - GLUE">
+
 ## Build
 
 ```bash

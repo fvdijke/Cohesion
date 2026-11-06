@@ -7,6 +7,10 @@ instrument and style.
 
 Part of the **COHESION** plugin suite.
 
+<img src="screenshots/assist.png" width="860" height="520" alt="ASSIST">
+<img src="screenshots/multiband.png" width="860" height="520" alt="MULTIBAND">
+<img src="screenshots/eq.png" width="860" height="520" alt="EQ">
+
 ## Features
 
 - **EQ** – 6-band parametric EQ (TPT/ZDF state-variable filters) plus HPF/LPF,
