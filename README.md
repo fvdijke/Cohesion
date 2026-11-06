@@ -23,7 +23,9 @@ double-tracked vocals (Lennon Wide, Abbey Road '66, Tomorrow Never…, Elliott S
 6-band parametric EQ + HPF/LPF, 2–5 band multiband dynamics, output limiter, live
 before/after spectrum, and the ASSIST analysis engine.
 
-<img src="Cohesion-EQComp/screenshots/assist.png" width="860" height="520" alt="COHESION - EQ/COMP">
+<img src="Cohesion-EQComp/screenshots/assist.png" width="860" height="520" alt="COHESION - EQ/COMP · ASSIST">
+<img src="Cohesion-EQComp/screenshots/multiband.png" width="860" height="520" alt="COHESION - EQ/COMP · MULTIBAND">
+<img src="Cohesion-EQComp/screenshots/eq.png" width="860" height="520" alt="COHESION - EQ/COMP · EQ">
 
 ### COHESION — GLUE
 Master-bus glue compressor (the first plugin of the suite).
