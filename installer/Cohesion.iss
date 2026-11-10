@@ -92,8 +92,18 @@ begin
 end;
 
 procedure InitializeWizard;
+var
+  dw: Integer;
 begin
-  BannerW := ScaleX(170);
+  { --- Venster wat breder maken zodat de inhoud rechts meer ruimte krijgt;
+        knoppen mee naar rechts verplaatsen. --- }
+  dw := ScaleX(90);
+  WizardForm.Width := WizardForm.Width + dw;
+  WizardForm.BackButton.Left   := WizardForm.BackButton.Left + dw;
+  WizardForm.NextButton.Left   := WizardForm.NextButton.Left + dw;
+  WizardForm.CancelButton.Left := WizardForm.CancelButton.Left + dw;
+
+  BannerW := ScaleX(150);
 
   { --- Eigen full-height COHESION-banner links op ELKE pagina.
         Hergebruik de door Inno geladen PNG (WizardImageFile) als bitmap. --- }
@@ -114,15 +124,15 @@ begin
   WizardForm.WizardSmallBitmapImage.Visible := False;
 
   { --- Alle pagina-inhoud naar rechts van de banner schuiven --- }
-  WizardForm.OuterNotebook.Left   := BannerW + ScaleX(24);
-  WizardForm.OuterNotebook.Width  := WizardForm.ClientWidth - WizardForm.OuterNotebook.Left - ScaleX(16);
-  WizardForm.OuterNotebook.Top    := ScaleY(70);
-  WizardForm.OuterNotebook.Height := WizardForm.CancelButton.Top - WizardForm.OuterNotebook.Top - ScaleY(18);
+  WizardForm.OuterNotebook.Left   := BannerW + ScaleX(20);
+  WizardForm.OuterNotebook.Width  := WizardForm.ClientWidth - WizardForm.OuterNotebook.Left - ScaleX(12);
+  WizardForm.OuterNotebook.Top    := ScaleY(64);
+  WizardForm.OuterNotebook.Height := WizardForm.CancelButton.Top - WizardForm.OuterNotebook.Top - ScaleY(16);
 
   { --- Blijvende titel + subtitel rechtsboven (als in de referentie) --- }
   TitleLabel := TNewStaticText.Create(WizardForm);
   TitleLabel.Parent     := WizardForm;
-  TitleLabel.Left       := BannerW + ScaleX(24);
+  TitleLabel.Left       := BannerW + ScaleX(20);
   TitleLabel.Top        := ScaleY(22);
   TitleLabel.AutoSize   := True;
   TitleLabel.Font.Size  := 15;
@@ -132,7 +142,7 @@ begin
 
   SubLabel := TNewStaticText.Create(WizardForm);
   SubLabel.Parent      := WizardForm;
-  SubLabel.Left        := BannerW + ScaleX(24);
+  SubLabel.Left        := BannerW + ScaleX(20);
   SubLabel.Top         := ScaleY(48);
   SubLabel.AutoSize    := True;
   SubLabel.Font.Size   := 9;
