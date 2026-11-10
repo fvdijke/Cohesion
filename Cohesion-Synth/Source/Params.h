@@ -41,16 +41,55 @@ namespace pid
     static const char* ringAmt = "ring_amount";  // osc3 x osc4
 
     // --- filter (ladder, stage 1) ---
-    static const char* fltType   = "flt_type";
-    static const char* fltCutoff = "flt_cutoff";
-    static const char* fltRes    = "flt_res";
-    static const char* fltDrive  = "flt_drive";
-    static const char* fltKeyTrk = "flt_keytrk";
-    static const char* fltEnvAmt = "flt_envamt";
+    static const char* fltType    = "flt_type";
+    static const char* fltCutoff  = "flt_cutoff";
+    static const char* fltRes     = "flt_res";
+    static const char* fltDrive   = "flt_drive";
+    static const char* fltKeyTrk  = "flt_keytrk";
+    static const char* fltEnvAmt  = "flt_envamt";
+    static const char* flt1EnvSrc = "flt1_envsrc";
 
-    // --- envelopes ---
+    // --- filter 2 (SVF multimode) ---
+    static const char* flt2Type   = "flt2_type";
+    static const char* flt2Cutoff = "flt2_cutoff";
+    static const char* flt2Res    = "flt2_res";
+    static const char* flt2Drive  = "flt2_drive";
+    static const char* flt2KeyTrk = "flt2_keytrk";
+    static const char* flt2EnvAmt = "flt2_envamt";
+    static const char* flt2Slope  = "flt2_slope";
+    static const char* flt2EnvSrc = "flt2_envsrc";
+
+    // --- filter routing ---
+    static const char* fltRouting = "flt_routing";    // Serial / Parallel
+    static const char* fltBalance = "flt_balance";    // parallel F1<->F2 mix
+
+    // --- envelopes (1 = AMP) ---
     static const char* ampA = "amp_a", *ampD = "amp_d", *ampS = "amp_s", *ampR = "amp_r";
-    static const char* fenA = "fenv_a", *fenD = "fenv_d", *fenS = "fenv_s", *fenR = "fenv_r";
+    inline juce::String envA (int n) { return "env" + juce::String (n) + "_a"; }
+    inline juce::String envD (int n) { return "env" + juce::String (n) + "_d"; }
+    inline juce::String envS (int n) { return "env" + juce::String (n) + "_s"; }
+    inline juce::String envR (int n) { return "env" + juce::String (n) + "_r"; }
+
+    // --- LFOs (n = 1..4) ---
+    inline juce::String lfoWave   (int n) { return "lfo" + juce::String (n) + "_wave"; }
+    inline juce::String lfoRate   (int n) { return "lfo" + juce::String (n) + "_rate"; }
+    inline juce::String lfoSync   (int n) { return "lfo" + juce::String (n) + "_sync"; }
+    inline juce::String lfoDiv    (int n) { return "lfo" + juce::String (n) + "_div"; }
+    inline juce::String lfoFade   (int n) { return "lfo" + juce::String (n) + "_fade"; }
+    inline juce::String lfoPhase  (int n) { return "lfo" + juce::String (n) + "_phase"; }
+    inline juce::String lfoSmooth (int n) { return "lfo" + juce::String (n) + "_smooth"; }
+    inline juce::String lfoMono   (int n) { return "lfo" + juce::String (n) + "_mono"; }
+
+    // --- mod matrix (slot = 0..7) ---
+    inline juce::String modSrc (int s) { return "mod" + juce::String (s) + "_src"; }
+    inline juce::String modDst (int s) { return "mod" + juce::String (s) + "_dst"; }
+    inline juce::String modAmt (int s) { return "mod" + juce::String (s) + "_amt"; }
+
+    static const juce::StringArray modSources { "Off", "LFO 1", "LFO 2", "LFO 3", "LFO 4",
+                                                "ENV 1", "ENV 2", "ENV 3", "ENV 4",
+                                                "Velocity", "Mod Wheel", "Key Track" };
+    static const juce::StringArray modDests   { "Off", "Filter 1 Cutoff", "Filter 2 Cutoff",
+                                                "Pitch", "Amp", "Pan", "LFO 1 Rate" };
 
     // --- global ---
     static const char* mainVol = "main_vol";
@@ -110,16 +149,64 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::fltDrive, 1 }, "Filter Drive", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
     p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::fltKeyTrk, 1 }, "Filter Key Trk", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
     p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::fltEnvAmt, 1 }, "Filter Env Amt", NormalisableRange<float> (-1.0f, 1.0f, 0.0001f), 0.0f));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::flt1EnvSrc, 1 }, "Filter 1 Env Src", StringArray { "ENV 1", "ENV 2", "ENV 3", "ENV 4" }, 1));
 
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampA, 1 }, "Amp Attack",  NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 5.0f));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampD, 1 }, "Amp Decay",   NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 400.0f));
+    // filter 2 (SVF multimode)
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::flt2Type, 1 }, "Filter 2 Type", StringArray { "LP", "HP", "BP", "Notch" }, 0));
+    {
+        NormalisableRange<float> cut (20.0f, 20000.0f, 0.0f, 0.3f);
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::flt2Cutoff, 1 }, "Filter 2 Cutoff", cut, 8000.0f));
+    }
+    p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::flt2Res, 1 }, "Filter 2 Res", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.12f));
+    p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::flt2Drive, 1 }, "Filter 2 Drive", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
+    p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::flt2KeyTrk, 1 }, "Filter 2 Key Trk", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
+    p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::flt2EnvAmt, 1 }, "Filter 2 Env Amt", NormalisableRange<float> (-1.0f, 1.0f, 0.0001f), 0.0f));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::flt2Slope, 1 }, "Filter 2 Slope", StringArray { "12 dB", "24 dB" }, 1));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::flt2EnvSrc, 1 }, "Filter 2 Env Src", StringArray { "ENV 1", "ENV 2", "ENV 3", "ENV 4" }, 1));
+
+    // routing
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::fltRouting, 1 }, "Filter Routing", StringArray { "Serial", "Parallel" }, 0));
+    p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::fltBalance, 1 }, "Filter Balance", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.5f));
+
+    // envelopes (1 = AMP, uses amp_* ids; 2..4 generic)
+    auto msR = [] { return NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f); };
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampA, 1 }, "Amp Attack",  msR(), 5.0f));
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampD, 1 }, "Amp Decay",   msR(), 400.0f));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampS, 1 }, "Amp Sustain", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.8f));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampR, 1 }, "Amp Release", NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 250.0f));
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::ampR, 1 }, "Amp Release", msR(), 250.0f));
+    for (int n = 2; n <= 4; ++n)
+    {
+        const float defD = n == 2 ? 300.0f : 500.0f;
+        const float defS = n == 2 ? 0.4f : 0.5f;
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::envA (n), 1 }, "ENV " + String (n) + " Attack",  msR(), 5.0f));
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::envD (n), 1 }, "ENV " + String (n) + " Decay",   msR(), defD));
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::envS (n), 1 }, "ENV " + String (n) + " Sustain", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), defS));
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::envR (n), 1 }, "ENV " + String (n) + " Release", msR(), 250.0f));
+    }
 
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::fenA, 1 }, "Filter Attack",  NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 5.0f));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::fenD, 1 }, "Filter Decay",   NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 300.0f));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::fenS, 1 }, "Filter Sustain", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.4f));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::fenR, 1 }, "Filter Release", NormalisableRange<float> (1.0f, 8000.0f, 0.0f, 0.3f), 250.0f));
+    // LFOs
+    for (int n = 1; n <= 4; ++n)
+    {
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::lfoWave (n), 1 }, "LFO " + String (n) + " Wave",
+                                                             StringArray { "Sine", "Triangle", "Saw", "Square", "S&H" }, 0));
+        p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::lfoRate (n), 1 }, "LFO " + String (n) + " Rate",
+                                                             NormalisableRange<float> (0.01f, 40.0f, 0.0f, 0.3f), 2.0f));
+        p.push_back (std::make_unique<AudioParameterBool>   (ParameterID { pid::lfoSync (n), 1 }, "LFO " + String (n) + " Sync", false));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::lfoDiv (n), 1 }, "LFO " + String (n) + " Div",
+                                                             StringArray { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32" }, 3));
+        p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::lfoFade (n), 1 }, "LFO " + String (n) + " Fade",   NormalisableRange<float> (0.0f, 5000.0f, 0.0f, 0.3f), 0.0f));
+        p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::lfoPhase (n), 1 }, "LFO " + String (n) + " Phase", NormalisableRange<float> (0.0f, 360.0f, 1.0f), 0.0f));
+        p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::lfoSmooth (n), 1 }, "LFO " + String (n) + " Smooth", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
+        p.push_back (std::make_unique<AudioParameterBool>   (ParameterID { pid::lfoMono (n), 1 }, "LFO " + String (n) + " Mono", false));
+    }
+
+    // mod matrix
+    for (int s = 0; s < 8; ++s)
+    {
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::modSrc (s), 1 }, "Mod " + String (s + 1) + " Src", pid::modSources, 0));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::modDst (s), 1 }, "Mod " + String (s + 1) + " Dst", pid::modDests, 0));
+        p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::modAmt (s), 1 }, "Mod " + String (s + 1) + " Amt", NormalisableRange<float> (-1.0f, 1.0f, 0.0001f), 0.0f));
+    }
 
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::mainVol, 1 }, "Main", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.8f));
 

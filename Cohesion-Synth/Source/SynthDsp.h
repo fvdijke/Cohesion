@@ -20,15 +20,31 @@ namespace syn
         float fine = 0, wtpos = 0, detune = 0, pan = 0, level = 0, phase = 0;
     };
 
+    struct EnvP   { float a = 5, d = 200, s = 0.7f, r = 200; };
+    struct LfoP   { int wave = 0; float rateHz = 2; bool sync = false; int div = 4;
+                    float fade = 0, phase = 0, smooth = 0; bool mono = false; };
+    struct ModSlot{ int src = 0, dst = 0; float amt = 0; };
+
+    // mod sources:  0 Off,1 LFO1,2 LFO2,3 LFO3,4 LFO4,5 ENV1,6 ENV2,7 ENV3,8 ENV4,9 Vel,10 ModWheel,11 KeyTrack
+    // mod dests:    0 Off,1 F1 Cutoff,2 F2 Cutoff,3 Pitch,4 Amp,5 Pan,6 LFO1 Rate
+    enum { kNumMod = 8 };
+
     struct Snapshot
     {
         OscP osc[4];
         bool  subOn = false;   int subWave = 0, subOct = -1;  float subLevel = 0.5f, subPan = 0;
         bool  noiseOn = false; int noiseType = 0;             float noiseLevel = 0.3f, noisePan = 0, noiseTilt = 0;
         float fmAmt = 0, ringAmt = 0;
-        int   fltType = 0;     float fltCutoff = 12000, fltRes = 0.1f, fltDrive = 0, fltKeyTrk = 0, fltEnvAmt = 0;
-        float ampA = 5, ampD = 400, ampS = 0.8f, ampR = 250;
-        float fenA = 5, fenD = 300, fenS = 0.4f, fenR = 250;
+
+        int   fltType = 0;    float fltCutoff = 12000, fltRes = 0.1f, fltDrive = 0, fltKeyTrk = 0, fltEnvAmt = 0;
+        int   flt1EnvSrc = 1;
+        int   flt2Type = 0;   float flt2Cutoff = 8000, flt2Res = 0.1f, flt2Drive = 0, flt2KeyTrk = 0, flt2EnvAmt = 0;
+        int   flt2Slope = 1,  flt2EnvSrc = 1;
+        int   routing = 0;    float routeBalance = 0.5f;  // 0 = F1 only ... 1 = F2 only (parallel)
+
+        EnvP  env[4];
+        LfoP  lfo[4];
+        ModSlot mod[kNumMod];
         float mainVol = 0.8f;
     };
 
@@ -49,8 +65,9 @@ namespace syn
         void setInc (double i)         { inc = i; }
         void setPhase01 (double p)     { phase = p - std::floor (p); }
 
-        float next (int wave, double pm = 0.0)
+        float next (int wave, double pm = 0.0, double mult = 1.0)
         {
+            const double step = inc * mult;
             double t = phase + pm;
             t -= std::floor (t);
 
@@ -63,28 +80,27 @@ namespace syn
                 case 1: // square
                 {
                     v = t < 0.5 ? 1.0f : -1.0f;
-                    v += polyBlep (t, inc);
+                    v += polyBlep (t, step);
                     double t2 = t + 0.5; if (t2 >= 1.0) t2 -= 1.0;
-                    v -= polyBlep (t2, inc);
+                    v -= polyBlep (t2, step);
                     break;
                 }
                 case 2: // triangle (integrated square)
                 {
                     float sq = t < 0.5 ? 1.0f : -1.0f;
-                    sq += polyBlep (t, inc);
+                    sq += polyBlep (t, step);
                     double t2 = t + 0.5; if (t2 >= 1.0) t2 -= 1.0;
-                    sq -= polyBlep (t2, inc);
-                    triState += (float) (4.0 * inc) * (sq - triState * 0.0f); // leaky integrate
-                    triState = triState * 0.9995f + (float) (4.0 * inc) * sq;
+                    sq -= polyBlep (t2, step);
+                    triState = triState * 0.9995f + (float) (4.0 * step) * sq;
                     v = juce::jlimit (-1.0f, 1.0f, triState);
                     break;
                 }
                 default: // saw
                     v = (float) (2.0 * t - 1.0);
-                    v -= polyBlep (t, inc);
+                    v -= polyBlep (t, step);
                     break;
             }
-            phase += inc; if (phase >= 1.0) phase -= 1.0;
+            phase += step; if (phase >= 1.0) phase -= 1.0;
             return v;
         }
     };
@@ -127,15 +143,16 @@ namespace syn
             }
         }
 
-        // fills stereo accumulators (scaled by gain). pm = phase-mod input.
+        // fills stereo accumulators (scaled by gain). pm = phase-mod input,
+        // mult = per-sample frequency multiplier (pitch modulation).
         // lastOut keeps the pre-gain mono signal (used as an FM/ring source).
-        void render (int wave, double pm, float gain, float& outL, float& outR)
+        void render (int wave, double pm, float gain, double mult, float& outL, float& outR)
         {
             const float norm = 1.0f / std::sqrt ((float) n);
             float sumMono = 0.0f;
             for (int k = 0; k < n; ++k)
             {
-                float s = cores[(size_t) k].next (wave, pm);
+                float s = cores[(size_t) k].next (wave, pm, mult);
                 outL += s * gL[(size_t) k] * norm * gain;
                 outR += s * gR[(size_t) k] * norm * gain;
                 sumMono += s;
@@ -150,7 +167,7 @@ namespace syn
         Core core;
         void startNote (double f, double sr) { core.setInc (f / sr); core.setPhase01 (0.0); }
         void setFreq  (double f, double sr)  { core.setInc (f / sr); }
-        float next (int wave) { return core.next (wave == 0 ? 3 : (wave == 1 ? 2 : 1)); }
+        float next (int wave, double mult = 1.0) { return core.next (wave == 0 ? 3 : (wave == 1 ? 2 : 1), 0.0, mult); }
     };
 
     // ---- noise (white / pink) ----
@@ -213,6 +230,79 @@ namespace syn
             else if (mode == 1) out = y1;        // LP12
             else                out = in - y3;   // HP (approx)
             return out / drive;
+        }
+    };
+
+    // ---- TPT state-variable filter, multimode (Cytomic). One channel. ----
+    struct SVF
+    {
+        double sr = 44100.0;
+        float ic1 = 0, ic2 = 0, g = 0, k = 1, a1 = 0, a2 = 0, a3 = 0, drive = 1;
+        int mode = 0;   // 0 LP, 1 HP, 2 BP, 3 Notch
+        int slope = 1;  // 0 = 12 dB, 1 = 24 dB (cascaded twice)
+        float ic1b = 0, ic2b = 0;
+
+        void setSR (double s) { sr = s; }
+        void reset()          { ic1 = ic2 = ic1b = ic2b = 0.0f; }
+
+        void setParams (float cut, float res, float driveAmt, int m, int sl)
+        {
+            cut = juce::jlimit (20.0f, (float) (sr * 0.45), cut);
+            g  = std::tan (juce::MathConstants<float>::pi * cut / (float) sr);
+            k  = 2.0f - 1.9f * juce::jlimit (0.0f, 1.0f, res);
+            a1 = 1.0f / (1.0f + g * (g + k));
+            a2 = g * a1;
+            a3 = g * a2;
+            mode = m; slope = sl; drive = 1.0f + driveAmt * 3.0f;
+        }
+
+        inline float stage (float v0, float& s1, float& s2)
+        {
+            float v3 = v0 - s2;
+            float v1 = a1 * s1 + a2 * v3;
+            float v2 = s2 + a2 * s1 + a3 * v3;
+            s1 = 2.0f * v1 - s1;
+            s2 = 2.0f * v2 - s2;
+            float lp = v2, bp = v1, hp = v0 - k * v1 - v2;
+            switch (mode) { case 1: return hp; case 2: return bp; case 3: return v0 - k * v1; default: return lp; }
+        }
+
+        float process (float x)
+        {
+            x *= drive;
+            float y = stage (x, ic1, ic2);
+            if (slope == 1) y = stage (y, ic1b, ic2b);
+            return y / drive;
+        }
+    };
+
+    // ---- LFO generator (per voice) ----
+    struct LfoGen
+    {
+        double phase = 0.0, inc = 0.0;
+        float sm = 0.0f, sh = 0.0f;
+        juce::Random rng;
+
+        void setRate (float hz, double sr) { inc = (double) hz / sr; }
+        void reset (double ph)             { phase = ph - std::floor (ph); sm = 0.0f; sh = rng.nextFloat() * 2.0f - 1.0f; }
+
+        float next (int wave, float smooth)
+        {
+            double t = phase;
+            float v;
+            switch (wave)
+            {
+                case 1:  v = (float) (4.0 * std::abs (t - 0.5) - 1.0); break;   // triangle
+                case 2:  v = (float) (2.0 * t - 1.0);                  break;   // saw
+                case 3:  v = t < 0.5 ? 1.0f : -1.0f;                   break;   // square
+                case 4:  v = sh;                                       break;   // sample & hold
+                default: v = (float) std::sin (juce::MathConstants<double>::twoPi * t); break;
+            }
+            phase += inc;
+            if (phase >= 1.0) { phase -= 1.0; sh = rng.nextFloat() * 2.0f - 1.0f; }
+            const float coef = 1.0f - smooth * 0.985f;
+            sm += (v - sm) * coef;
+            return smooth > 0.001f ? sm : v;
         }
     };
 }

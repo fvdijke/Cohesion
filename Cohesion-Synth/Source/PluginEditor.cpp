@@ -25,11 +25,13 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     mixer = std::make_unique<MixerPanel> (proc.apvts);
     oscMix.addAndMakeVisible (*mixer);
 
+    // --- FILTER / MOD tab ---
+    filterTab = std::make_unique<FilterModTab> (proc.apvts);
+    addChildComponent (*filterTab);
+
     // --- placeholder tabs ---
-    filterTab = std::make_unique<PlaceholderPanel> ("FILTER / MOD  —  coming soon");
     fxTab     = std::make_unique<PlaceholderPanel> ("FX  —  coming soon");
     arpTab    = std::make_unique<PlaceholderPanel> ("ARP  —  coming soon");
-    addChildComponent (*filterTab);
     addChildComponent (*fxTab);
     addChildComponent (*arpTab);
 
@@ -47,15 +49,17 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     addAndMakeVisible (midiLed);
     mainKnob = std::make_unique<LabeledKnob> (proc.apvts, pid::mainVol, "MAIN");
     addAndMakeVisible (*mainKnob);
-    presetName.setText ("Init  —  Default", juce::dontSendNotification);
     presetName.setJustificationType (juce::Justification::centred);
     presetName.setColour (juce::Label::textColourId, juce::Colour (0xffeafff6));
     presetName.setColour (juce::Label::backgroundColourId, juce::Colour (0xff0e1013));
     addAndMakeVisible (presetName);
     presetPrev.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0e1013));
     presetNext.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0e1013));
+    presetPrev.onClick = [this] { proc.loadPreset (proc.currentPresetIndex() - 1); updatePresetName(); };
+    presetNext.onClick = [this] { proc.loadPreset (proc.currentPresetIndex() + 1); updatePresetName(); };
     addAndMakeVisible (presetPrev);
     addAndMakeVisible (presetNext);
+    updatePresetName();
 
     showTab (0);
     setSize (1040, 720);
@@ -142,6 +146,11 @@ void CohesionSynthAudioProcessorEditor::resized()
     noisePanel->setBounds (botRow.removeFromLeft (180));
     botRow.removeFromLeft (gapp);
     mixer->setBounds (botRow);
+}
+
+void CohesionSynthAudioProcessorEditor::updatePresetName()
+{
+    presetName.setText (proc.presetDisplayName (proc.currentPresetIndex()), juce::dontSendNotification);
 }
 
 void CohesionSynthAudioProcessorEditor::timerCallback()

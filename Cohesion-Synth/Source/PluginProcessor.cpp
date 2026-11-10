@@ -12,6 +12,21 @@ CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
         v->setSnapshot (&snapshot);
         synth.addVoice (v);
     }
+    presets = cohesionSynthPresets();
+}
+
+juce::String CohesionSynthAudioProcessor::presetDisplayName (int i) const
+{
+    if (i < 0 || i >= (int) presets.size()) return {};
+    return presets[(size_t) i].category + "  —  " + presets[(size_t) i].name;
+}
+
+void CohesionSynthAudioProcessor::loadPreset (int i)
+{
+    if (presets.empty()) return;
+    const int n = (int) presets.size();
+    presetIndex = ((i % n) + n) % n;
+    applySynthPreset (*this, apvts, presets[(size_t) presetIndex]);
 }
 
 void CohesionSynthAudioProcessor::prepareToPlay (double sampleRate, int)
@@ -64,15 +79,46 @@ void CohesionSynthAudioProcessor::updateSnapshot()
     snapshot.fmAmt   = f (pid::fmAmt);
     snapshot.ringAmt = f (pid::ringAmt);
 
-    snapshot.fltType   = ip (pid::fltType);
-    snapshot.fltCutoff = f  (pid::fltCutoff);
-    snapshot.fltRes    = f  (pid::fltRes);
-    snapshot.fltDrive  = f  (pid::fltDrive);
-    snapshot.fltKeyTrk = f  (pid::fltKeyTrk);
-    snapshot.fltEnvAmt = f  (pid::fltEnvAmt);
+    snapshot.fltType    = ip (pid::fltType);
+    snapshot.fltCutoff  = f  (pid::fltCutoff);
+    snapshot.fltRes     = f  (pid::fltRes);
+    snapshot.fltDrive   = f  (pid::fltDrive);
+    snapshot.fltKeyTrk  = f  (pid::fltKeyTrk);
+    snapshot.fltEnvAmt  = f  (pid::fltEnvAmt);
+    snapshot.flt1EnvSrc = ip (pid::flt1EnvSrc);
 
-    snapshot.ampA = f (pid::ampA); snapshot.ampD = f (pid::ampD); snapshot.ampS = f (pid::ampS); snapshot.ampR = f (pid::ampR);
-    snapshot.fenA = f (pid::fenA); snapshot.fenD = f (pid::fenD); snapshot.fenS = f (pid::fenS); snapshot.fenR = f (pid::fenR);
+    snapshot.flt2Type   = ip (pid::flt2Type);
+    snapshot.flt2Cutoff = f  (pid::flt2Cutoff);
+    snapshot.flt2Res    = f  (pid::flt2Res);
+    snapshot.flt2Drive  = f  (pid::flt2Drive);
+    snapshot.flt2KeyTrk = f  (pid::flt2KeyTrk);
+    snapshot.flt2EnvAmt = f  (pid::flt2EnvAmt);
+    snapshot.flt2Slope  = ip (pid::flt2Slope);
+    snapshot.flt2EnvSrc = ip (pid::flt2EnvSrc);
+
+    snapshot.routing      = ip (pid::fltRouting);
+    snapshot.routeBalance = f  (pid::fltBalance);
+
+    snapshot.env[0] = { f (pid::ampA), f (pid::ampD), f (pid::ampS), f (pid::ampR) };
+    for (int n = 2; n <= 4; ++n)
+        snapshot.env[n - 1] = { f (pid::envA (n)), f (pid::envD (n)), f (pid::envS (n)), f (pid::envR (n)) };
+
+    for (int n = 1; n <= 4; ++n)
+    {
+        auto& l = snapshot.lfo[n - 1];
+        l.wave   = ip (pid::lfoWave (n));
+        l.rateHz = f  (pid::lfoRate (n));
+        l.sync   = bp (pid::lfoSync (n));
+        l.div    = ip (pid::lfoDiv (n));
+        l.fade   = f  (pid::lfoFade (n));
+        l.phase  = f  (pid::lfoPhase (n));
+        l.smooth = f  (pid::lfoSmooth (n));
+        l.mono   = bp (pid::lfoMono (n));
+    }
+
+    for (int s = 0; s < syn::kNumMod; ++s)
+        snapshot.mod[s] = { ip (pid::modSrc (s)), ip (pid::modDst (s)), f (pid::modAmt (s)) };
+
     snapshot.mainVol = f (pid::mainVol);
 }
 

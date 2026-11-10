@@ -247,6 +247,8 @@ struct MidiLed : juce::Component
     }
 };
 
+#include "FilterModTab.h"
+
 // ===========================================================================
 class CohesionSynthAudioProcessorEditor : public juce::AudioProcessorEditor,
                                           private juce::Timer
@@ -261,6 +263,7 @@ public:
 private:
     void timerCallback() override;
     void showTab (int t);
+    void updatePresetName();
 
     CohesionSynthAudioProcessor& proc;
     CohesionLookAndFeel lnf;
@@ -274,7 +277,8 @@ private:
     std::unique_ptr<MiniPanel> subPanel, noisePanel;
     std::unique_ptr<MixerPanel> mixer;
 
-    std::unique_ptr<PlaceholderPanel> filterTab, fxTab, arpTab;
+    std::unique_ptr<FilterModTab>     filterTab;
+    std::unique_ptr<PlaceholderPanel> fxTab, arpTab;
 
     MidiLed midiLed;
     std::unique_ptr<LabeledKnob> mainKnob;

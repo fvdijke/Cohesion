@@ -5,6 +5,7 @@
 #include "Params.h"
 #include "SynthDsp.h"
 #include "SynthVoice.h"
+#include "Presets.h"
 
 class CohesionSynthAudioProcessor : public juce::AudioProcessor
 {
@@ -40,11 +41,19 @@ public:
     // MIDI activity flag for the on-screen indicator (editor polls + clears).
     std::atomic<int> midiActivity { 0 };
 
+    // --- factory presets ---
+    int          numPresets() const          { return (int) presets.size(); }
+    int          currentPresetIndex() const  { return presetIndex; }
+    juce::String presetDisplayName (int i) const;
+    void         loadPreset (int i);
+
 private:
     void updateSnapshot();
 
     juce::Synthesiser synth;
     syn::Snapshot snapshot;
+    std::vector<SynthPreset> presets;
+    int presetIndex = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CohesionSynthAudioProcessor)
 };
