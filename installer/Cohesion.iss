@@ -38,6 +38,7 @@ WizardImageFile=wizard-banner.png
 WizardSmallImageFile=wizard-small.png
 WizardImageStretch=no
 AlwaysShowComponentsList=yes
+DisableWelcomePage=no
 UninstallDisplayName={#AppName}
 
 [Languages]
