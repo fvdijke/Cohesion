@@ -19,14 +19,19 @@ namespace adt
         void reset() { std::fill (buf.begin(), buf.end(), 0.0f); w = 0; }
         void push (float x) { buf[(size_t) w] = x; w = (w + 1) % size; }
 
-        // delay in samples (>= 0): 0 = most recent sample.
+        // delay in samples (>= 0): 0 = most recent sample. Cubic (Catmull-Rom)
+        // interpolation — stateless, safe for multiple taps and clean under modulation.
         float read (float d) const
         {
-            d = juce::jlimit (0.0f, (float) (size - 2), d);
+            d = juce::jlimit (1.0f, (float) (size - 3), d);
             const int k0 = (int) std::floor (d);
             const float fr = d - (float) k0;
             auto at = [&] (int k) { return buf[(size_t) (((w - 1 - k) % size + size) % size)]; };
-            return at (k0) * (1.0f - fr) + at (k0 + 1) * fr;
+            const float ym1 = at (k0 - 1), y0 = at (k0), y1 = at (k0 + 1), y2 = at (k0 + 2);
+            const float c1 = 0.5f * (y1 - ym1);
+            const float c2 = ym1 - 2.5f * y0 + 2.0f * y1 - 0.5f * y2;
+            const float c3 = 0.5f * (y2 - ym1) + 1.5f * (y0 - y1);
+            return ((c3 * fr + c2) * fr + c1) * fr + y0;
         }
     };
 

@@ -176,6 +176,15 @@ void CohesionADTAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     const float msToSamp = (float) sampleRate / 1000.0f;
     float blockPeak = 0.0f;
 
+    // transparent below +-0.95, soft-limits peaks (keeps the dry path clean, no aliasing on normal levels)
+    auto softclip = [] (float x)
+    {
+        const float t = 0.95f;
+        if (x >  t) return  t + (1.0f - t) * std::tanh ((x - t) / (1.0f - t));
+        if (x < -t) return -t + (1.0f - t) * std::tanh ((x + t) / (1.0f - t));
+        return x;
+    };
+
     for (int n = 0; n < numSmps; ++n)
     {
         const float dryL = L[n];
@@ -227,8 +236,8 @@ void CohesionADTAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         if (monoOut) { const float mo = 0.5f * (outL + outR); outL = outR = mo; }
 
         const float og = outSm.getNextValue();
-        L[n] = std::tanh (outL * og);          // gentle soft-clip -> no overload crackle
-        if (R) R[n] = std::tanh (outR * og);
+        L[n] = softclip (outL * og);
+        if (R) R[n] = softclip (outR * og);
         blockPeak = juce::jmax (blockPeak, juce::jmax (std::abs (L[n]), R ? std::abs (R[n]) : 0.0f));
 
         // scope (input peak envelope)
