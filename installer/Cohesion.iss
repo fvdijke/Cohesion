@@ -10,12 +10,13 @@
 
 #define AppName        "COHESION"
 #define AppPublisher   "Pepperwood"
-#define AppVersion     "1.0.1"
+#define AppVersion     "1.0.2"
 
 ; Absolute bronpaden naar de gebouwde VST3-bundels (Release)
-#define GlueSrc    "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Glue\build\Cohesion_artefacts\Release\VST3\Cohesion Glue.vst3"
-#define EqCompSrc  "E:\OneDrive\Projectbestanden\COHESION\Cohesion-EQComp\build\CohesionEQComp_artefacts\Release\VST3\Cohesion EQ-Comp.vst3"
-#define AdtSrc     "E:\OneDrive\Projectbestanden\COHESION\Cohesion-ADT\build\CohesionADT_artefacts\Release\VST3\Cohesion ADT.vst3"
+#define GlueSrc      "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Glue\build\Cohesion_artefacts\Release\VST3\Cohesion Glue.vst3"
+#define EqCompSrc    "E:\OneDrive\Projectbestanden\COHESION\Cohesion-EQComp\build\CohesionEQComp_artefacts\Release\VST3\Cohesion EQ-Comp.vst3"
+#define AdtSrc       "E:\OneDrive\Projectbestanden\COHESION\Cohesion-ADT\build\CohesionADT_artefacts\Release\VST3\Cohesion ADT.vst3"
+#define TransientSrc "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Transient\build\CohesionTransient_artefacts\Release\VST3\Cohesion Transient.vst3"
 
 [Setup]
 AppName={#AppName}
@@ -33,6 +34,10 @@ OutputBaseFilename=COHESION-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=wizard-banner.png
+WizardSmallImageFile=wizard-small.png
+WizardImageStretch=no
+AlwaysShowComponentsList=yes
 UninstallDisplayName={#AppName}
 
 [Languages]
@@ -49,17 +54,20 @@ Name: "full";   Description: "Alle plugins"
 Name: "custom"; Description: "Aangepast"; Flags: iscustom
 
 [Components]
-Name: "glue";   Description: "Cohesion Glue (VST3)";     Types: full custom
-Name: "eqcomp"; Description: "Cohesion EQ-Comp (VST3)";  Types: full custom
-Name: "adt";    Description: "Cohesion ADT (VST3)";      Types: full custom
+Name: "glue";      Description: "Cohesion Glue (VST3)";      Types: full custom
+Name: "eqcomp";    Description: "Cohesion EQ-Comp (VST3)";   Types: full custom
+Name: "adt";       Description: "Cohesion ADT (VST3)";       Types: full custom
+Name: "transient"; Description: "Cohesion Transient (VST3)"; Types: full custom
 
 [Files]
 ; .vst3 is op Windows een map-bundel -> hele map recursief kopieren
 Source: "{#GlueSrc}\*";   DestDir: "{app}\Cohesion Glue.vst3";    Components: glue;   Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#EqCompSrc}\*"; DestDir: "{app}\Cohesion EQ-Comp.vst3"; Components: eqcomp; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#AdtSrc}\*";    DestDir: "{app}\Cohesion ADT.vst3";     Components: adt;    Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#TransientSrc}\*"; DestDir: "{app}\Cohesion Transient.vst3"; Components: transient; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\Cohesion Glue.vst3"
 Type: filesandordirs; Name: "{app}\Cohesion EQ-Comp.vst3"
 Type: filesandordirs; Name: "{app}\Cohesion ADT.vst3"
+Type: filesandordirs; Name: "{app}\Cohesion Transient.vst3"
