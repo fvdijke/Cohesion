@@ -81,29 +81,13 @@ Type: filesandordirs; Name: "{app}\Cohesion Transient.vst3"
 ; ===========================================================================
 [Code]
 var
-  TitleLabel, SubLabel: TNewStaticText;
   Banner: TBitmapImage;
-  BannerW: Integer;
-
-procedure PlaceHeading(ACaption, ASub: String);
-begin
-  TitleLabel.Caption := ACaption;
-  SubLabel.Caption   := ASub;
-end;
 
 procedure InitializeWizard;
 var
-  dw: Integer;
+  BannerW: Integer;
 begin
-  { --- Venster wat breder maken zodat de inhoud rechts meer ruimte krijgt;
-        knoppen mee naar rechts verplaatsen. --- }
-  dw := ScaleX(90);
-  WizardForm.Width := WizardForm.Width + dw;
-  WizardForm.BackButton.Left   := WizardForm.BackButton.Left + dw;
-  WizardForm.NextButton.Left   := WizardForm.NextButton.Left + dw;
-  WizardForm.CancelButton.Left := WizardForm.CancelButton.Left + dw;
-
-  BannerW := ScaleX(150);
+  BannerW := ScaleX(170);
 
   { --- Eigen full-height COHESION-banner links op ELKE pagina.
         Hergebruik de door Inno geladen PNG (WizardImageFile) als bitmap. --- }
@@ -114,50 +98,16 @@ begin
   Banner.Left    := 0;
   Banner.Top     := 0;
   Banner.Width   := BannerW;
-  Banner.Height  := WizardForm.CancelButton.Top - ScaleY(10);
+  Banner.Height  := WizardForm.CancelButton.Top - ScaleY(12);
 
-  { --- Standaard welkom/afrond-afbeelding, kop-strip en kleine logo weg
-        (voorkomt de dubbele banner op de afrondpagina). --- }
+  { --- Standaard welkom/afrond-afbeelding en kleine logo weg
+        (voorkomt de dubbele banner op de afrondpagina). De kop-strip van Inno
+        blijft staan: die vult de rechterkant netjes op. --- }
   WizardForm.WizardBitmapImage.Visible      := False;
-  WizardForm.MainPanel.Visible              := False;
-  WizardForm.Bevel.Visible                  := False;
   WizardForm.WizardSmallBitmapImage.Visible := False;
 
-  { --- Alle pagina-inhoud naar rechts van de banner schuiven --- }
-  WizardForm.OuterNotebook.Left   := BannerW + ScaleX(20);
-  WizardForm.OuterNotebook.Width  := WizardForm.ClientWidth - WizardForm.OuterNotebook.Left - ScaleX(12);
-  WizardForm.OuterNotebook.Top    := ScaleY(64);
-  WizardForm.OuterNotebook.Height := WizardForm.CancelButton.Top - WizardForm.OuterNotebook.Top - ScaleY(16);
-
-  { --- Blijvende titel + subtitel rechtsboven (als in de referentie) --- }
-  TitleLabel := TNewStaticText.Create(WizardForm);
-  TitleLabel.Parent     := WizardForm;
-  TitleLabel.Left       := BannerW + ScaleX(20);
-  TitleLabel.Top        := ScaleY(22);
-  TitleLabel.AutoSize   := True;
-  TitleLabel.Font.Size  := 15;
-  TitleLabel.Font.Style := [fsBold];
-  TitleLabel.Font.Color := clBlack;
-  TitleLabel.Caption    := 'Install COHESION Suite';
-
-  SubLabel := TNewStaticText.Create(WizardForm);
-  SubLabel.Parent      := WizardForm;
-  SubLabel.Left        := BannerW + ScaleX(20);
-  SubLabel.Top         := ScaleY(48);
-  SubLabel.AutoSize    := True;
-  SubLabel.Font.Size   := 9;
-  SubLabel.Font.Color  := clGray;
-  SubLabel.Caption     := 'Original VST3 audio plugins by Pepperwood.';
-end;
-
-procedure CurPageChanged(CurPageID: Integer);
-begin
-  case CurPageID of
-    wpSelectComponents: PlaceHeading('Install COHESION Suite', 'Choose which plugins to install.');
-    wpSelectDir:        PlaceHeading('Install COHESION Suite', 'Pick the install location (defaults to the VST3 folder).');
-    wpInstalling:       PlaceHeading('Installing COHESION Suite', 'Copying the selected VST3 plugins...');
-    wpFinished:         PlaceHeading('COHESION Suite installed', 'Your plugins are ready to use.');
-  else
-    PlaceHeading('Install COHESION Suite', 'Original VST3 audio plugins by Pepperwood.');
-  end;
+  { --- Inno's eigen inhoud (kop + pagina) compleet naar rechts van de banner;
+        de bestaande anchors laten alle controls meelopen en de breedte vullen. --- }
+  WizardForm.OuterNotebook.Left  := BannerW;
+  WizardForm.OuterNotebook.Width := WizardForm.ClientWidth - BannerW;
 end;
