@@ -82,6 +82,7 @@ Type: filesandordirs; Name: "{app}\Cohesion Transient.vst3"
 [Code]
 var
   TitleLabel, SubLabel: TNewStaticText;
+  Banner: TBitmapImage;
   BannerW: Integer;
 
 procedure PlaceHeading(ACaption, ASub: String);
@@ -94,17 +95,22 @@ procedure InitializeWizard;
 begin
   BannerW := ScaleX(170);
 
-  { --- Full-height COHESION banner links op ELKE pagina --- }
-  WizardForm.WizardBitmapImage.Parent  := WizardForm;
-  WizardForm.WizardBitmapImage.Left    := 0;
-  WizardForm.WizardBitmapImage.Top     := 0;
-  WizardForm.WizardBitmapImage.Width   := BannerW;
-  WizardForm.WizardBitmapImage.Height  := WizardForm.CancelButton.Top - ScaleY(10);
-  WizardForm.WizardBitmapImage.Stretch := True;
+  { --- Eigen full-height COHESION-banner links op ELKE pagina.
+        Hergebruik de door Inno geladen PNG (WizardImageFile) als bitmap. --- }
+  Banner := TBitmapImage.Create(WizardForm);
+  Banner.Parent  := WizardForm;
+  Banner.Bitmap  := WizardForm.WizardBitmapImage.Bitmap;
+  Banner.Stretch := True;
+  Banner.Left    := 0;
+  Banner.Top     := 0;
+  Banner.Width   := BannerW;
+  Banner.Height  := WizardForm.CancelButton.Top - ScaleY(10);
 
-  { --- Standaard kop-strip en kleine logo weg --- }
-  WizardForm.MainPanel.Visible            := False;
-  WizardForm.Bevel.Visible                := False;
+  { --- Standaard welkom/afrond-afbeelding, kop-strip en kleine logo weg
+        (voorkomt de dubbele banner op de afrondpagina). --- }
+  WizardForm.WizardBitmapImage.Visible      := False;
+  WizardForm.MainPanel.Visible              := False;
+  WizardForm.Bevel.Visible                  := False;
   WizardForm.WizardSmallBitmapImage.Visible := False;
 
   { --- Alle pagina-inhoud naar rechts van de banner schuiven --- }
