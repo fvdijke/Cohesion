@@ -69,10 +69,10 @@ Run this inside a plugin folder (e.g. `Cohesion-ADT`). The built `.vst3` lands i
 
 ## Installer
 
-A combined Windows installer is built from `installer/Cohesion.iss` with Inno Setup 6
-(`ISCC.exe installer/Cohesion.iss`). It lets you choose which plugin(s) to install and
-the location (defaults to the VST3 folder). Pre-built installers are attached to the
-[releases](../../releases).
+A combined, branded Windows installer is built from `installer/Cohesion.iss` with
+Inno Setup 6 (`ISCC.exe installer/Cohesion.iss`). It lets you choose which plugin(s) to
+install and the location (defaults to the VST3 folder). Download the latest pre-built
+installer from the [releases](../../releases/latest).
 
 ## License
 
