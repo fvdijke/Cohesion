@@ -79,11 +79,14 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     showTab (0);
 
     // --- resizable, fixed aspect ratio, size remembered in the plugin state ---
+    // Read the stored scale first: setting the resize limits triggers a resize to the
+    // minimum size, which must not overwrite the remembered size.
+    const double scale = juce::jlimit (0.6, 2.0, (double) proc.apvts.state.getProperty ("uiScale", 1.0));
     setResizable (true, true);
     setResizeLimits ((int) (kW * 0.6), (int) (kH * 0.6), kW * 2, kH * 2);
     if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) kW / (double) kH);
-    const double scale = juce::jlimit (0.6, 2.0, (double) proc.apvts.state.getProperty ("uiScale", 1.0));
     setSize (juce::roundToInt (kW * scale), juce::roundToInt (kH * scale));
+    sizeRestored = true;
     // Value boxes of sliders are created when the slider is constructed, i.e. before it
     // is parented into this editor, so they pick up JUCE's default look (light frames).
     // Re-send the look-and-feel so every value box is rebuilt in the Cohesion style.
@@ -122,7 +125,7 @@ void CohesionSynthAudioProcessorEditor::resized()
     const float scale = (float) getWidth() / (float) kW;
     canvas.setBounds (0, 0, kW, kH);
     canvas.setTransform (juce::AffineTransform::scale (scale));
-    proc.apvts.state.setProperty ("uiScale", scale, nullptr);
+    if (sizeRestored) proc.apvts.state.setProperty ("uiScale", scale, nullptr);
 }
 
 void CohesionSynthAudioProcessorEditor::paintCanvas (juce::Graphics& g)

@@ -310,6 +310,7 @@ private:
     CohesionLookAndFeel lnf;
     static constexpr int kW = 1040, kH = 720;
     Canvas canvas;
+    bool sizeRestored = false;
     void paintCanvas (juce::Graphics&);
     void layoutCanvas();
 

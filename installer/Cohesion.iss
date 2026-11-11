@@ -4,19 +4,22 @@
 ;
 ;  Custom wizard: full-height COHESION-banner links op elke pagina.
 ;  Keuzes in de wizard:
-;   - welke plugin(s): Glue / EQ-Comp / ADT / Transient (los of alle)
+;   - welke plugin(s): Glue / EQ-Comp / ADT / Transient / Synth (los of alle)
+;   - optioneel de standalone app COHESION SysEx (DX7 bank builder)
 ;   - installatiemap: standaard de VST3-map (C:\Program Files\Common Files\VST3)
 ; ===========================================================================
 
 #define AppName        "COHESION"
 #define AppPublisher   "Pepperwood"
-#define AppVersion     "1.0.3"
+#define AppVersion     "1.1.0"
 
 ; Absolute bronpaden naar de gebouwde VST3-bundels (Release)
 #define GlueSrc      "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Glue\build\Cohesion_artefacts\Release\VST3\Cohesion Glue.vst3"
 #define EqCompSrc    "E:\OneDrive\Projectbestanden\COHESION\Cohesion-EQComp\build\CohesionEQComp_artefacts\Release\VST3\Cohesion EQ-Comp.vst3"
 #define AdtSrc       "E:\OneDrive\Projectbestanden\COHESION\Cohesion-ADT\build\CohesionADT_artefacts\Release\VST3\Cohesion ADT.vst3"
 #define TransientSrc "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Transient\build\CohesionTransient_artefacts\Release\VST3\Cohesion Transient.vst3"
+#define SynthSrc     "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Synth\build\CohesionSynth_artefacts\Release\VST3\Cohesion Synth.vst3"
+#define SysExExe     "E:\OneDrive\Projectbestanden\COHESION\Cohesion-SysEx\build\CohesionSysEx_artefacts\Release\Cohesion SysEx.exe"
 
 [Setup]
 AppName={#AppName}
@@ -50,11 +53,11 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
 SetupWindowTitle=COHESION Suite  -  Setup
-SelectComponentsLabel2=Kies welke plugin(s) je installeert:
+SelectComponentsLabel2=Kies welke plugin(s) en apps je installeert:
 SelectDirLabel3=De plugins worden geplaatst in onderstaande map (standaard de VST3-map).
 
 [Types]
-Name: "full";   Description: "Alle plugins"
+Name: "full";   Description: "Alles"
 Name: "custom"; Description: "Aangepast"; Flags: iscustom
 
 [Components]
@@ -62,6 +65,8 @@ Name: "glue";      Description: "Cohesion Glue (VST3)";      Types: full custom
 Name: "eqcomp";    Description: "Cohesion EQ-Comp (VST3)";   Types: full custom
 Name: "adt";       Description: "Cohesion ADT (VST3)";       Types: full custom
 Name: "transient"; Description: "Cohesion Transient (VST3)"; Types: full custom
+Name: "synth";     Description: "Cohesion Synth (VST3 instrument)"; Types: full custom
+Name: "sysex";     Description: "COHESION SysEx - DX7 bank builder (app)"; Types: full custom
 
 [Files]
 ; .vst3 is op Windows een map-bundel -> hele map recursief kopieren
@@ -69,12 +74,19 @@ Source: "{#GlueSrc}\*";      DestDir: "{app}\Cohesion Glue.vst3";      Component
 Source: "{#EqCompSrc}\*";    DestDir: "{app}\Cohesion EQ-Comp.vst3";   Components: eqcomp;    Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#AdtSrc}\*";       DestDir: "{app}\Cohesion ADT.vst3";       Components: adt;       Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#TransientSrc}\*"; DestDir: "{app}\Cohesion Transient.vst3"; Components: transient; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SynthSrc}\*";     DestDir: "{app}\Cohesion Synth.vst3";     Components: synth;     Flags: ignoreversion recursesubdirs createallsubdirs
+; the standalone app goes to Program Files, independent of the chosen VST3 folder
+Source: "{#SysExExe}";        DestDir: "{commonpf64}\Pepperwood\COHESION SysEx"; Components: sysex; Flags: ignoreversion
+
+[Icons]
+Name: "{autoprograms}\COHESION SysEx"; Filename: "{commonpf64}\Pepperwood\COHESION SysEx\Cohesion SysEx.exe"; Components: sysex
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\Cohesion Glue.vst3"
 Type: filesandordirs; Name: "{app}\Cohesion EQ-Comp.vst3"
 Type: filesandordirs; Name: "{app}\Cohesion ADT.vst3"
 Type: filesandordirs; Name: "{app}\Cohesion Transient.vst3"
+Type: filesandordirs; Name: "{app}\Cohesion Synth.vst3"
 
 ; ===========================================================================
 ;  Custom single-look wizard: banner over de volle hoogte, titel rechts.
