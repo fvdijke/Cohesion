@@ -59,7 +59,7 @@ struct LibraryOverlay : juce::Component
 
         for (auto* lb : { &catList, &presetList })
         {
-            lb->setRowHeight (26);
+            lb->setRowHeight (34);
             lb->setColour (juce::ListBox::backgroundColourId, juce::Colour (0xff0a0c0f));
             lb->setColour (juce::ListBox::outlineColourId, juce::Colour (0xff1c2127));
             lb->setOutlineThickness (1);
@@ -83,15 +83,15 @@ struct LibraryOverlay : juce::Component
         auto r = juce::Rectangle<float> (0, 0, (float) w, (float) h).reduced (3.0f, 2.0f);
         if (sel)          { g.setColour (juce::Colour (0xff0f6e56)); g.fillRoundedRectangle (r, 4.0f); }
         else if (current) { g.setColour (juce::Colour (0xff0f2a22)); g.fillRoundedRectangle (r, 4.0f); }
-        if (current) { g.setColour (juce::Colour (0xff39ffb0)); g.fillEllipse (r.getX() + 7, r.getCentreY() - 3, 6, 6); }
+        if (current) { g.setColour (juce::Colour (0xff39ffb0)); g.fillEllipse (r.getX() + 8, r.getCentreY() - 4, 8, 8); }
         g.setColour (sel ? juce::Colour (0xffeafff6) : juce::Colour (0xffdfe6e2));
-        g.setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::plain));
-        g.drawText (text, r.withTrimmedLeft (20).withTrimmedRight (60), juce::Justification::centredLeft);
+        g.setFont (juce::Font ("Segoe UI", 15.0f, juce::Font::plain));
+        g.drawText (text, r.withTrimmedLeft (24).withTrimmedRight (90), juce::Justification::centredLeft);
         if (right.isNotEmpty())
         {
             g.setColour (sel ? juce::Colour (0xffbff5e2) : juce::Colour (0xff6c7a74));
-            g.setFont (juce::Font ("Segoe UI", 10.0f, juce::Font::plain));
-            g.drawText (right, r.withTrimmedRight (10), juce::Justification::centredRight);
+            g.setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::plain));
+            g.drawText (right, r.withTrimmedRight (12), juce::Justification::centredRight);
         }
     }
 
@@ -133,7 +133,7 @@ struct LibraryOverlay : juce::Component
 
     void close() { setVisible (false); if (onClose) onClose(); }
 
-    juce::Rectangle<int> panelBounds() const { return getLocalBounds().withSizeKeepingCentre (680, 470); }
+    juce::Rectangle<int> panelBounds() const { return getLocalBounds().withSizeKeepingCentre (800, 560); }
 
     void paint (juce::Graphics& g) override
     {
@@ -142,22 +142,22 @@ struct LibraryOverlay : juce::Component
         g.setColour (juce::Colour (0xff15181c)); g.fillRoundedRectangle (pb, 9.0f);
         g.setColour (juce::Colour (0xff39ffb0).withAlpha (0.35f)); g.drawRoundedRectangle (pb.reduced (0.5f), 9.0f, 1.0f);
         g.setColour (juce::Colours::white);
-        g.setFont (juce::Font ("Segoe UI", 15.0f, juce::Font::bold));
-        g.drawText ("LIBRARY", (int) pb.getX() + 20, (int) pb.getY() + 14, 200, 22, juce::Justification::centredLeft);
+        g.setFont (juce::Font ("Segoe UI", 19.0f, juce::Font::bold));
+        g.drawText ("LIBRARY", (int) pb.getX() + 22, (int) pb.getY() + 14, 240, 26, juce::Justification::centredLeft);
         g.setColour (juce::Colour (0xff6c7a74));
-        g.setFont (juce::Font ("Segoe UI", 10.0f, juce::Font::plain));
-        g.drawText ("CATEGORY", catList.getX(), catList.getY() - 18, 120, 14, juce::Justification::centredLeft);
-        g.drawText ("PRESET  (" + juce::String ((int) visible.size()) + ")", presetList.getX(), presetList.getY() - 18, 200, 14, juce::Justification::centredLeft);
+        g.setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::plain));
+        g.drawText ("CATEGORY", catList.getX(), catList.getY() - 20, 160, 16, juce::Justification::centredLeft);
+        g.drawText ("PRESET  (" + juce::String ((int) visible.size()) + ")", presetList.getX(), presetList.getY() - 20, 240, 16, juce::Justification::centredLeft);
         g.drawText ("click = load   |   double-click = load + close   |   Esc = close",
-                    (int) pb.getX(), (int) pb.getBottom() - 26, (int) pb.getWidth(), 16, juce::Justification::centred);
+                    (int) pb.getX(), (int) pb.getBottom() - 28, (int) pb.getWidth(), 18, juce::Justification::centred);
     }
 
     void resized() override
     {
         auto pb = panelBounds();
-        closeBtn.setBounds (pb.getRight() - 40, pb.getY() + 12, 26, 26);
-        auto body = pb.reduced (20).withTrimmedTop (44).withTrimmedBottom (22);
-        catList.setBounds (body.removeFromLeft (200));
+        closeBtn.setBounds (pb.getRight() - 44, pb.getY() + 12, 30, 30);
+        auto body = pb.reduced (22).withTrimmedTop (52).withTrimmedBottom (26);
+        catList.setBounds (body.removeFromLeft (240));
         body.removeFromLeft (14);
         presetList.setBounds (body);
     }

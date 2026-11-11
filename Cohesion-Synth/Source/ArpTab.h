@@ -47,7 +47,6 @@ struct TempoBox : juce::Component
     {
         auto r = getLocalBounds().toFloat();
         g.setColour (juce::Colour (0xff0a0c0f)); g.fillRoundedRectangle (r, 5.0f);
-        g.setColour (juce::Colour (0xff1c2127)); g.drawRoundedRectangle (r.reduced (0.5f), 5.0f, 1.0f);
         const double bpm = synced() ? proc.getFxBpm() : (double) arpui::get (proc.apvts, pid::arpTempo);
         g.setColour (juce::Colour (0xffeafff6)); g.setFont (juce::Font ("Segoe UI", 13.0f, juce::Font::plain));
         g.drawText (juce::String (bpm, 1) + " BPM", r.withTrimmedBottom (10), juce::Justification::centred);
@@ -204,12 +203,13 @@ struct ArpTab : juce::Component, private juce::Timer
     juce::ComboBox modeBox, orderBox;
     std::unique_ptr<ComboAtt> modeAtt, orderAtt;
     juce::TextButton patPrev { "<" }, patNext { ">" }, stepsDown { "<" }, stepsUp { ">" }, randomizeBtn { "RANDOMIZE" };
-    juce::Label patName, stepsLbl;
+    juce::Label stepsLbl;
+    juce::ComboBox patBox;
     juce::OwnedArray<LabeledKnob> topKnobs, botKnobs;
     TempoBox tempo;
     StepSequencer seq;
     HeldKeyboard keys;
-    int patIndex = 2;
+    int patIndex = 2, shownPattern = -2;
 
     explicit ArpTab (CohesionSynthAudioProcessor& p) : proc (p), apvts (p.apvts), tempo (p), seq (p), keys (p)
     {
@@ -235,12 +235,17 @@ struct ArpTab : juce::Component, private juce::Timer
         stepsUp.onClick   = [this] { arpui::setParam (apvts, pid::arpSteps, juce::jmin (16.0f, arpui::get (apvts, pid::arpSteps) + 1.0f)); markCustom(); };
         randomizeBtn.onClick = [this] { randomize(); };
 
-        for (auto* l : { &patName, &stepsLbl })
+        for (int i = 0; i < (int) arpPatterns().size(); ++i) patBox.addItem (arpPatterns()[(size_t) i].name, i + 1);
+        patBox.setTextWhenNothingSelected ("Custom");
+        patBox.onChange = [this] { if (patBox.getSelectedId() > 0 && patBox.getSelectedId() - 1 != shownPattern) applyPattern (patBox.getSelectedId() - 1); };
+        addAndMakeVisible (patBox);
+
+        for (auto* l : { &stepsLbl })
         {
             l->setJustificationType (juce::Justification::centred);
             l->setColour (juce::Label::textColourId, juce::Colour (0xffeafff6));
             l->setColour (juce::Label::backgroundColourId, juce::Colour (0xff0a0c0f));
-            l->setColour (juce::Label::outlineColourId, juce::Colour (0xff1c2127));
+            l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
             l->setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::plain));
             addAndMakeVisible (*l);
         }
@@ -264,7 +269,9 @@ struct ArpTab : juce::Component, private juce::Timer
         if (pt.rate >= 0)     arpui::setParam (apvts, pid::arpRate, (float) pt.rate);
         if (pt.gate >= 0.0f)  arpui::setParam (apvts, pid::arpGate, pt.gate);
         if (pt.swing >= 0.0f) arpui::setParam (apvts, pid::arpSwing, pt.swing);
+        shownPattern = patIndex;
         apvts.state.setProperty ("arpPattern", pt.name, nullptr);
+        patBox.setSelectedId (patIndex + 1, juce::dontSendNotification);
         seq.repaint();
     }
 
@@ -309,7 +316,7 @@ struct ArpTab : juce::Component, private juce::Timer
         onBtn.setBounds (top.getX() + 16, ty + 18, 78, 30);
         modeBox.setBounds (top.getX() + 110, ty + 26, 170, 28);
         patPrev.setBounds (top.getX() + 16, ty + 80, 24, 26);
-        patName.setBounds (top.getX() + 44, ty + 80, 212, 26);
+        patBox.setBounds (top.getX() + 44, ty + 80, 212, 26);
         patNext.setBounds (top.getX() + 260, ty + 80, 24, 26);
         for (int i = 0; i < topKnobs.size(); ++i) topKnobs[i]->setBounds (top.getX() + 298 + i * 76, ty + 8, 74, 104);
         const int bx = top.getX() + 298 + 5 * 76 + 8;
@@ -334,7 +341,14 @@ struct ArpTab : juce::Component, private juce::Timer
     {
         if (! isShowing()) return;
         const auto name = apvts.state.getProperty ("arpPattern", arpPatterns()[(size_t) patIndex].name).toString();
-        if (patName.getText() != name) patName.setText (name, juce::dontSendNotification);
+        int found = -1;
+        for (int i = 0; i < (int) arpPatterns().size(); ++i) if (arpPatterns()[(size_t) i].name == name) { found = i; break; }
+        if (found != shownPattern || (found < 0 && patBox.getText() != name))
+        {
+            shownPattern = found;
+            if (found >= 0) { patIndex = found; patBox.setSelectedId (found + 1, juce::dontSendNotification); }
+            else            { patBox.setSelectedId (0, juce::dontSendNotification); patBox.setText (name, juce::dontSendNotification); }
+        }
         const auto st = juce::String ((int) arpui::get (apvts, pid::arpSteps));
         if (stepsLbl.getText() != st) stepsLbl.setText (st, juce::dontSendNotification);
         const bool synced = arpui::get (apvts, pid::arpSync) > 0.5f;

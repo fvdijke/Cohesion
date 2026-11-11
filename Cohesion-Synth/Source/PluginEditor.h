@@ -35,12 +35,21 @@ struct LabeledKnob : juce::Component
     }
 };
 
+// Dims every child except the ON button (used for bypassed oscillators).
+inline void setPanelDimmed (juce::Component& panel, juce::Component& keepBright, bool dimmed)
+{
+    for (auto* c : panel.getChildren())
+        if (c != &keepBright) c->setAlpha (dimmed ? 0.38f : 1.0f);
+}
+
 // ---------------------------------------------------------------------------
 //  One oscillator panel (OSC 1..4).
 // ---------------------------------------------------------------------------
 struct OscPanel : juce::Component
 {
     int idx;
+    bool dimmed = false;
+    void setDimmed (bool d) { if (d == dimmed) return; dimmed = d; setPanelDimmed (*this, onBtn, d); repaint(); }
     juce::ToggleButton onBtn;
     juce::ComboBox modeBox, waveBox;
     std::unique_ptr<ButtonAtt> onAtt;
@@ -74,8 +83,9 @@ struct OscPanel : juce::Component
         auto r = getLocalBounds().toFloat();
         g.setColour (juce::Colour (0xff0d0f12)); g.fillRoundedRectangle (r, 7.0f);
         g.setColour (juce::Colours::white.withAlpha (0.08f)); g.drawRoundedRectangle (r, 7.0f, 1.0f);
-        g.setColour (juce::Colour (0xff39ffb0)); g.fillEllipse (14.0f, 14.0f, 10.0f, 10.0f);
-        g.setColour (juce::Colour (0xffe8eef0));
+        g.setColour (dimmed ? juce::Colour (0xff2b3138) : juce::Colour (0xff39ffb0)); g.fillEllipse (14.0f, 14.0f, 10.0f, 10.0f);
+        if (dimmed) { g.setColour (juce::Colour (0xff39ffb0).withAlpha (0.5f)); g.drawEllipse (14.0f, 14.0f, 10.0f, 10.0f, 1.0f); }
+        g.setColour (dimmed ? juce::Colour (0xff6c7a74) : juce::Colour (0xffe8eef0));
         g.setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::bold));
         g.drawText ("OSC " + juce::String (idx), 32, 10, 120, 18, juce::Justification::centredLeft);
     }
@@ -105,6 +115,8 @@ struct OscPanel : juce::Component
 struct MiniPanel : juce::Component
 {
     juce::String title;
+    bool dimmed = false;
+    void setDimmed (bool d) { if (d == dimmed) return; dimmed = d; setPanelDimmed (*this, onBtn, d); repaint(); }
     juce::ToggleButton onBtn;
     juce::ComboBox box;
     std::unique_ptr<ButtonAtt> onAtt;
@@ -129,8 +141,9 @@ struct MiniPanel : juce::Component
         auto r = getLocalBounds().toFloat();
         g.setColour (juce::Colour (0xff0d0f12)); g.fillRoundedRectangle (r, 7.0f);
         g.setColour (juce::Colours::white.withAlpha (0.08f)); g.drawRoundedRectangle (r, 7.0f, 1.0f);
-        g.setColour (juce::Colour (0xff39ffb0)); g.fillEllipse (14.0f, 16.0f, 10.0f, 10.0f);
-        g.setColour (juce::Colour (0xffe8eef0));
+        g.setColour (dimmed ? juce::Colour (0xff2b3138) : juce::Colour (0xff39ffb0)); g.fillEllipse (14.0f, 16.0f, 10.0f, 10.0f);
+        if (dimmed) { g.setColour (juce::Colour (0xff39ffb0).withAlpha (0.5f)); g.drawEllipse (14.0f, 16.0f, 10.0f, 10.0f, 1.0f); }
+        g.setColour (dimmed ? juce::Colour (0xff6c7a74) : juce::Colour (0xffe8eef0));
         g.setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::bold));
         g.drawText (title, 32, 12, 120, 18, juce::Justification::centredLeft);
     }
@@ -157,6 +170,12 @@ struct MixerPanel : juce::Component
     juce::OwnedArray<juce::Slider> faders;
     juce::OwnedArray<SliderAtt> faderAtts;
     juce::StringArray labels;
+    bool stripDim[6] {};
+    void setStripDimmed (int i, bool d)
+    {
+        if (i < 0 || i >= faders.size() || stripDim[i] == d) return;
+        stripDim[i] = d; faders[i]->setAlpha (d ? 0.38f : 1.0f); repaint();
+    }
     std::unique_ptr<LabeledKnob> fmKnob, ringKnob;
 
     MixerPanel (juce::AudioProcessorValueTreeState& apvts)
@@ -190,7 +209,10 @@ struct MixerPanel : juce::Component
         g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
         for (int i = 0; i < labels.size(); ++i)
             if (auto* f = faders[i])
+            {
+                g.setColour (juce::Colour (0xff9fe1cb).withAlpha (stripDim[i] ? 0.38f : 1.0f));
                 g.drawText (labels[i], f->getX() - 8, f->getBottom() + 2, f->getWidth() + 16, 14, juce::Justification::centred);
+            }
     }
 
     void resized() override

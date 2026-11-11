@@ -169,4 +169,15 @@ void CohesionSynthAudioProcessorEditor::timerCallback()
     else
         midiLed.level *= 0.82f;
     midiLed.repaint();
+
+    // dim bypassed oscillators (panel + mixer strip)
+    auto isOn = [this] (const juce::String& id) { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; };
+    for (int i = 0; i < 4; ++i)
+    {
+        const bool off = ! isOn (pid::oscOn (i + 1));
+        oscPanels[i]->setDimmed (off);
+        mixer->setStripDimmed (i, off);
+    }
+    subPanel->setDimmed (! isOn (pid::subOn));     mixer->setStripDimmed (4, ! isOn (pid::subOn));
+    noisePanel->setDimmed (! isOn (pid::noiseOn)); mixer->setStripDimmed (5, ! isOn (pid::noiseOn));
 }

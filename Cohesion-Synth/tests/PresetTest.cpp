@@ -47,6 +47,29 @@ int main()
         applySynthPreset (d, d.apvts, p);   // must not assert / crash
     }
     std::printf ("%d presets, %d categories (%s), %d values checked\n", (int) presets.size(), cats.size(), cats.joinIntoString (", ").toRawUTF8(), checked);
+
+    // ---- value display: at most one decimal, and text -> value -> text round-trips ----
+    int floats = 0, shown = 0;
+    for (auto* prm : d.getParameters())
+        if (auto* fp = dynamic_cast<juce::AudioParameterFloat*> (prm))
+        {
+            ++floats;
+            for (float n01 : { 0.0f, 0.137f, 0.5f, 0.861f, 1.0f })
+            {
+                const auto txt = prm->getText (n01, 0);
+                const auto num = txt.initialSectionContainingOnly ("-0123456789.");
+                const int dot = num.indexOfChar ('.');
+                const bool oneDecimal = dot < 0 || num.length() - dot - 1 <= 1;
+                const auto again = prm->getText (prm->getValueForText (txt), 0);
+                if (! oneDecimal || again != txt)
+                {
+                    std::printf ("  [FAIL] %s: '%s' -> '%s'\n", fp->getName (40).toRawUTF8(), txt.toRawUTF8(), again.toRawUTF8());
+                    ++problems;
+                }
+                if (n01 == 0.5f && shown++ % 9 == 0) std::printf ("    e.g. %-22s %s\n", fp->getName (22).toRawUTF8(), txt.toRawUTF8());
+            }
+        }
+    std::printf ("%d float parameters checked for 1-decimal display + round trip\n", floats);
     std::printf ("%s (%d problem%s)\n", problems == 0 ? "ALL PASSED" : "FAILURES", problems, problems == 1 ? "" : "s");
     return problems == 0 ? 0 : 1;
 }

@@ -14,7 +14,7 @@ public:
         setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
         setColour (juce::ComboBox::backgroundColourId,      juce::Colour (0xff0e1013));
         setColour (juce::ComboBox::textColourId,            juce::Colour (0xffdfe6e2));
-        setColour (juce::ComboBox::outlineColourId,         juce::Colour (0xff39ffb0).withAlpha (0.40f));
+        setColour (juce::ComboBox::outlineColourId,         juce::Colours::transparentBlack);   // no frame around values
         setColour (juce::ComboBox::arrowColourId,           juce::Colour (0xff9fe1cb));
         setColour (juce::PopupMenu::backgroundColourId,     juce::Colour (0xff15181c));
         setColour (juce::PopupMenu::highlightedBackgroundColourId, juce::Colour (0xff0f6e56));
@@ -62,6 +62,16 @@ public:
             return;
         }
         juce::LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, sliderPos, minPos, maxPos, style, s);
+    }
+
+    // Buttons keep their own subtle teal frame (V4 would borrow the combo-box outline colour).
+    void drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour& bg, bool over, bool down) override
+    {
+        auto r = b.getLocalBounds().toFloat().reduced (0.5f);
+        auto c = bg.withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.5f);
+        if (down || over) c = c.contrasting (down ? 0.2f : 0.05f);
+        g.setColour (c); g.fillRoundedRectangle (r, 5.0f);
+        g.setColour (juce::Colour (0xff39ffb0).withAlpha (0.30f)); g.drawRoundedRectangle (r, 5.0f, 1.0f);
     }
 
     void drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bool, bool) override
