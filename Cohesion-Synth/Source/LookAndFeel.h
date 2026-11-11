@@ -21,12 +21,14 @@ public:
         setColour (juce::PopupMenu::textColourId,           juce::Colour (0xffdfe6e2));
         setColour (juce::TextButton::buttonColourId,        juce::Colour (0xff0e1013));
         setColour (juce::TextButton::textColourOffId,       juce::Colour (0xff9fe1cb));
+        setColour (juce::ScrollBar::thumbColourId,          juce::Colour (0xff39ffb0).withAlpha (0.45f));
     }
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h,
                            float sliderPos, float rotStart, float rotEnd, juce::Slider&) override
     {
-        auto r = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h).reduced (4.0f);
+        const float side = (float) juce::jmin (w, h);   // always round, whatever the box shape
+        auto r = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h).withSizeKeepingCentre (side, side).reduced (4.0f);
         const float cx = r.getCentreX(), cy = r.getCentreY();
         const float rad = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f;
         const float ang = rotStart + sliderPos * (rotEnd - rotStart);
@@ -59,6 +61,20 @@ public:
             g.setColour (juce::Colour (0xff39ffb0).withAlpha (0.8f)); g.fillRoundedRectangle (fill, 5.0f);
             g.setColour (juce::Colour (0xff3a4149)); g.fillEllipse (cx - 7.0f, thumbY - 7.0f, 14.0f, 14.0f);
             g.setColour (juce::Colour (0xff11161b)); g.drawEllipse (cx - 7.0f, thumbY - 7.0f, 14.0f, 14.0f, 1.5f);
+            return;
+        }
+        if (style == juce::Slider::LinearHorizontal)
+        {
+            const float cy = (float) y + (float) h * 0.5f;
+            juce::Rectangle<float> track ((float) x, cy - 3.0f, (float) w, 6.0f);
+            g.setColour (juce::Colour (0xff13181d)); g.fillRoundedRectangle (track, 3.0f);
+            // bipolar ranges fill from zero, others from the left edge
+            float from = (float) x;
+            if (s.getMinimum() < 0.0 && s.getMaximum() > 0.0) from = (float) s.getPositionOfValue (0.0);
+            const float a = juce::jmin (from, sliderPos), b = juce::jmax (from, sliderPos);
+            g.setColour (juce::Colour (0xff39ffb0).withAlpha (0.8f)); g.fillRoundedRectangle (a, cy - 3.0f, juce::jmax (2.0f, b - a), 6.0f, 3.0f);
+            g.setColour (juce::Colour (0xff3a4149)); g.fillEllipse (sliderPos - 6.0f, cy - 6.0f, 12.0f, 12.0f);
+            g.setColour (juce::Colour (0xff11161b)); g.drawEllipse (sliderPos - 6.0f, cy - 6.0f, 12.0f, 12.0f, 1.5f);
             return;
         }
         juce::LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, sliderPos, minPos, maxPos, style, s);
@@ -95,7 +111,7 @@ public:
         l->setColour (juce::Label::backgroundWhenEditingColourId, juce::Colour (0xff0e1013));
         l->setColour (juce::Label::outlineWhenEditingColourId,    juce::Colour (0xff39ffb0));
         l->setColour (juce::Label::textColourId,                  juce::Colour (0xff9fe1cb));
-        l->setFont (juce::Font ("Segoe UI", 10.0f, juce::Font::plain));
+        l->setFont (juce::Font ("Segoe UI", 12.5f, juce::Font::plain));
         return l;
     }
 };

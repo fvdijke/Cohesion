@@ -70,6 +70,11 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
 
     showTab (0);
     setSize (1040, 720);
+    // Value boxes of sliders are created when the slider is constructed, i.e. before it
+    // is parented into this editor, so they pick up JUCE's default look (light frames).
+    // Re-send the look-and-feel so every value box is rebuilt in the Cohesion style.
+    sendLookAndFeelChange();
+    updateDimming();
     startTimerHz (30);
 }
 
@@ -170,6 +175,11 @@ void CohesionSynthAudioProcessorEditor::timerCallback()
         midiLed.level *= 0.82f;
     midiLed.repaint();
 
+    updateDimming();
+}
+
+void CohesionSynthAudioProcessorEditor::updateDimming()
+{
     // dim bypassed oscillators (panel + mixer strip)
     auto isOn = [this] (const juce::String& id) { return proc.apvts.getRawParameterValue (id)->load() > 0.5f; };
     for (int i = 0; i < 4; ++i)

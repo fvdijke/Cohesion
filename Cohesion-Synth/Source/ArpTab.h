@@ -209,7 +209,7 @@ struct ArpTab : juce::Component, private juce::Timer
     TempoBox tempo;
     StepSequencer seq;
     HeldKeyboard keys;
-    int patIndex = 2, shownPattern = -2;
+    int patIndex = 0, shownPattern = -2;
 
     explicit ArpTab (CohesionSynthAudioProcessor& p) : proc (p), apvts (p.apvts), tempo (p), seq (p), keys (p)
     {
@@ -251,6 +251,7 @@ struct ArpTab : juce::Component, private juce::Timer
         }
         addAndMakeVisible (tempo); addAndMakeVisible (seq); addAndMakeVisible (keys);
         seq.onEdited = [this] { markCustom(); };
+        refresh();
         startTimerHz (30);
     }
 
@@ -340,6 +341,11 @@ struct ArpTab : juce::Component, private juce::Timer
     void timerCallback() override
     {
         if (! isShowing()) return;
+        refresh();
+    }
+
+    void refresh()
+    {
         const auto name = apvts.state.getProperty ("arpPattern", arpPatterns()[(size_t) patIndex].name).toString();
         int found = -1;
         for (int i = 0; i < (int) arpPatterns().size(); ++i) if (arpPatterns()[(size_t) i].name == name) { found = i; break; }

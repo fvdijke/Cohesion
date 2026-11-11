@@ -22,11 +22,13 @@ struct LabeledKnob : juce::Component
         : name (nm)
     {
         s.setSliderStyle (juce::Slider::RotaryVerticalDrag);
-        s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 56, 13);
+        s.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 68, 17);
         addAndMakeVisible (s);
         att = std::make_unique<SliderAtt> (apvts, id, s);
     }
     void resized() override { auto r = getLocalBounds(); r.removeFromBottom (12); s.setBounds (r); }
+    // the value box is built at construction (default look); rebuild it once we are parented
+    void parentHierarchyChanged() override { s.sendLookAndFeelChange(); }
     void paint (juce::Graphics& g) override
     {
         g.setColour (juce::Colour (0xff9fb0aa));
@@ -287,7 +289,11 @@ public:
 
 private:
     void timerCallback() override;
-    void showTab (int t);
+public:
+    void showTab (int t);          // public so the offline UI snapshot can switch tabs
+    void openLibrary() { library->open(); }
+    void updateDimming();
+private:
     void updatePresetName();
 
     CohesionSynthAudioProcessor& proc;

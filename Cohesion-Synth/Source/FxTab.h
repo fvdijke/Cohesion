@@ -120,8 +120,8 @@ struct FxPanel : juce::Component
         };
         bar (d.getY() + 14, gr / 24.0f, fxui::teal, "GR");
         bar (d.getY() + 36, thr, juce::Colour (0xff5dcaa5).withAlpha (0.6f), "THR");
-        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
-        g.drawText ("-" + juce::String (gr, 1) + " dB", d.reduced (8, 4), juce::Justification::topRight);
+        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain));
+        g.drawText ((gr >= 0.05f ? "-" : "") + juce::String (gr, 1) + " dB", d.reduced (8, 4), juce::Justification::topRight);
     }
 
     void drawFlanger (juce::Graphics& g, juce::Rectangle<float> d, float a)
@@ -177,7 +177,7 @@ struct FxPanel : juce::Component
             amp *= juce::jmax (0.05f, fb);
             x += spacing;
         }
-        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
+        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain));
         g.drawText (juce::String ((int) std::round (ms)) + " ms", d.reduced (8, 4), juce::Justification::topRight);
     }
 
@@ -199,7 +199,7 @@ struct FxPanel : juce::Component
         g.setColour (fxui::teal.withAlpha (0.14f * a)); g.fillPath (p);
         g.setColour (fxui::teal.withAlpha (a)); g.strokePath (p, juce::PathStrokeType (1.4f));
         const float rt = 0.2f * std::pow (60.0f, decay);
-        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
+        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain));
         g.drawText (juce::String (rt, 1) + " s", d.reduced (8, 4), juce::Justification::topRight);
     }
 
@@ -221,8 +221,8 @@ struct FxPanel : juce::Component
         g.setColour (juce::Colour (0xff5dcaa5).withAlpha (0.7f * a)); g.fillRoundedRectangle (t2.withWidth (juce::jmax (10.0f, t2.getWidth() * outFrac)), 5.0f);
         const float cx = t2.getX() + t2.getWidth() * juce::jlimit (0.0f, 1.0f, (ceil + 36.0f) / 36.0f);
         g.setColour (juce::Colour (0xffeafff6).withAlpha (a)); g.fillRect (cx - 1.0f, t2.getY() - 3, 2.0f, t2.getHeight() + 6);
-        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
-        g.drawText ("-" + juce::String (gr, 1) + " dB", d.reduced (8, 3), juce::Justification::topRight);
+        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain));
+        g.drawText ((gr >= 0.05f ? "-" : "") + juce::String (gr, 1) + " dB", d.reduced (8, 3), juce::Justification::topRight);
     }
 
     void resized() override
@@ -395,6 +395,7 @@ struct FxTab : juce::Component, private juce::Timer
         addAndMakeVisible (bar);
         for (int i = 0; i <= fx::kNumFx; ++i) { panels[i] = std::make_unique<FxPanel> (p, i); addAndMakeVisible (*panels[i]); }
         bar.onOrderChanged = [this] { resized(); };
+        for (auto& pnl : panels) pnl->tick (proc.getFxBpm());
         startTimerHz (30);
     }
 
