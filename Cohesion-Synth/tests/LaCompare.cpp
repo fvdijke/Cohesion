@@ -263,6 +263,14 @@ int main (int argc, char** argv)
         return 0;
     }
 
+    if (mode == "rhythmmap")
+    {
+        std::printf ("rhythm map at 0x%X, %d keys from %d, %d rhythm timbres\n", rom->rhythmMapAt, (int) rom->rhythmKeys.size(), rom->rhythmFirstKey, (int) rom->rhythmAll.size());
+        for (size_t i = 0; i < rom->rhythmKeys.size(); i += 6)
+        { const auto& k = rom->rhythmKeys[i]; std::printf ("  key %3d timbre %3d (%s) lvl %3d pan %2d rev %d\n", rom->rhythmFirstKey + (int) i, k.timbre,
+              k.timbre >= 64 && k.timbre - 64 < (int) rom->rhythmAll.size() ? rom->rhythmAll[(size_t) k.timbre - 64].getName().toRawUTF8() : "-", k.level, k.pan, k.reverb); }
+        return 0;
+    }
     if (mode == "dump")
     {
         for (int a = 4; a < argc; ++a)

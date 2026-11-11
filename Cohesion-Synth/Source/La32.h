@@ -39,7 +39,12 @@ namespace la32
         std::vector<float> pcm;
         std::vector<PcmWave> waves;
         std::vector<Timbre> melodic;   // 128: group A (0-63), group B (64-127)
-        std::vector<Timbre> rhythm;
+        std::vector<Timbre> rhythm;           // rhythm timbres without "OFF" placeholders (library)
+        std::vector<Timbre> rhythmAll;        // all rhythm timbres in ROM order (rhythm numbers 64..)
+        // rhythm key map from the control ROM: key rhythmFirstKey + i -> timbre / level / pan / reverb
+        struct RhythmKey { uint8_t timbre = 0xff, level = 0, pan = 7, reverb = 0; };
+        std::vector<RhythmKey> rhythmKeys;
+        int rhythmFirstKey = 24, rhythmMapAt = -1;
     };
 
     inline uint64_t fnv1a (const uint8_t* p, size_t n, uint64_t h = 1469598103934665603ULL)
@@ -211,8 +216,35 @@ namespace la32
             for (int i = 0; i < best->count; ++i)
             {
                 auto t = readTimbre (c, cs, best->targets[(size_t) i], comp);
+                rom->rhythmAll.push_back (t);
                 if (t.getName() != "OFF") rom->rhythm.push_back (t);
             }
+        }
+
+        // rhythm key map: the longest run of (timbre, level 0-100, pan 0-14, reverb 0-1) records
+        // that mostly points at rhythm timbres (numbers 64..)
+        {
+            const int nR = (int) rom->rhythmAll.size();
+            size_t bestAt = 0; int bestLen = 0;
+            for (size_t at = 0; at + 4 * 40 <= cs; ++at)
+            {
+                int len = 0, drums = 0;
+                for (size_t q = at; q + 4 <= cs && len < 128; q += 4, ++len)
+                {
+                    const uint8_t t = c[q], l = c[q + 1], pn = c[q + 2], rv = c[q + 3];
+                    const bool tOk = t < 64 + nR || t == 127 || t == 0xff;       // 127 = off
+                    if (! tOk || l > 100 || pn > 14 || rv > 2) break;
+                    if (t >= 64 && t < 64 + nR && l > 0) ++drums;
+                }
+                if (drums >= 20 && len > bestLen) { bestLen = len; bestAt = at; }
+            }
+            for (int i = 0; i < bestLen; ++i)
+            {
+                const uint8_t* q = c + bestAt + 4 * (size_t) i;
+                rom->rhythmKeys.push_back ({ q[0], q[1], q[2], (uint8_t) (q[3] != 0 ? 1 : 0) });
+            }
+            rom->rhythmFirstKey = 24;
+            rom->rhythmMapAt = (int) bestAt;
         }
 
         for (int k = 0; k < waveCount; ++k)

@@ -1,8 +1,9 @@
 # COHESION
 
 **COHESION** is a suite of original JUCE audio tools by **Pepperwood** — four VST3 effects,
-a VST3 synthesizer and a standalone DX7 bank builder — sharing one dark/teal house style and a
-consistent workflow. All DSP is original code.
+a VST3 synthesizer, an MT-32-compatible sound module and a standalone DX7 bank builder — sharing
+one dark/teal house style and a consistent workflow. All DSP is original code (the LA MODULE's
+optional MUNT engine is the separate, LGPL-licensed Munt library).
 
 | Plugin | What it does |
 |--------|--------------|
@@ -11,6 +12,7 @@ consistent workflow. All DSP is original code.
 | **COHESION — ADT** | **Artificial Double Tracking** — the Abbey Road trick: a modulated, delayed double of a vocal to make it thicker and wider. |
 | **COHESION — TRANSIENT** | Four-control transient shaper (attack, sustain, sensitivity, output) — add punch or soften attacks. |
 | **COHESION — SYNTH** | Polyphonic hybrid synth: 4 VA oscillators + a DX7-compatible 6-operator FM engine, 2 filters, mod matrix, FX chain, arpeggiator, 1,101 presets and DX7 SysEx import. |
+| **COHESION — LA MODULE** | Multi-timbral MT-32 / CM-32L-compatible module: 8 parts + rhythm on their own MIDI channels, MT-32 SysEx, system reverb + echo, mixer and separate outputs; MUNT or own COHESION LA engine. |
 | **COHESION — SYSEX** | Standalone app that builds new DX7 32-voice SysEx banks from voices picked out of a `.syx` collection. |
 
 ## Plugins
@@ -25,6 +27,15 @@ imported. See [Cohesion-Synth](Cohesion-Synth/README.md).
 
 <img src="Cohesion-Synth/screenshots/osc-mix.png" width="860" height="520" alt="COHESION - SYNTH · OSC / MIX">
 <img src="Cohesion-Synth/screenshots/fm.png" width="860" height="520" alt="COHESION - SYNTH · FM">
+
+### COHESION — LA MODULE
+A multi-timbral MT-32 / CM-32L-compatible sound module for your own Roland ROM dumps: eight
+melodic parts and a rhythm part, each with its own MIDI channel, program changes and MT-32
+SysEx, the MT-32 system reverb plus an echo send, a mixer (level, pan, sends, mute / solo) and a
+separate stereo output per part. Two engines: **MUNT** (the Munt emulator, loaded as a separate
+LGPL DLL) and the own **COHESION LA** engine. See [Cohesion-LaModule](Cohesion-LaModule/README.md).
+
+<img src="Cohesion-LaModule/screenshots/module.png" width="860" height="546" alt="COHESION - LA MODULE">
 
 ### COHESION — SYSEX
 Standalone DX7 bank builder: index a `.syx` collection, search and audition voices through
@@ -71,6 +82,7 @@ COHESION/
 ├─ Cohesion-ADT/       # COHESION - ADT       (VST3 "Cohesion ADT")
 ├─ Cohesion-Transient/ # COHESION - TRANSIENT (VST3 "Cohesion Transient")
 ├─ Cohesion-Synth/     # COHESION - SYNTH     (VST3 instrument "Cohesion Synth")
+├─ Cohesion-LaModule/  # COHESION - LA MODULE (VST3 instrument "Cohesion LA Module")
 ├─ Cohesion-SysEx/     # COHESION - SYSEX     (standalone DX7 bank builder, see its README)
 └─ installer/         # Inno Setup script for the combined Windows installer
 ```
@@ -99,4 +111,5 @@ installer from the [releases](../../releases/latest).
 
 ## License
 
-© Pepperwood. All rights reserved.
+© Pepperwood. All rights reserved. The optional `mt32emu.dll` shipped with COHESION — LA MODULE
+is [Munt](https://github.com/munt/munt), licensed under the GNU LGPL 2.1 or later.
