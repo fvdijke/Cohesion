@@ -99,12 +99,14 @@ namespace la32
     struct PtrMap { size_t at = 0; int count = 0; long base = 0; std::vector<size_t> targets; };
 
     // Finds runs of little-endian 16-bit pointers (plus a bank offset) to plausible timbres.
+    // A table can be valid with more than one offset; every variant is returned (same `at`).
     inline std::vector<PtrMap> findMaps (const uint8_t* rom, size_t size, int minCount)
     {
         std::vector<PtrMap> maps;
         const long bases[] = { 0x0000, 0x4000, 0x8000, 0xC000, 0x10000, 0x14000, 0x18000 };
         for (size_t at = 0; at + 2 * (size_t) minCount <= size; at += 2)
         {
+            int longest = 0;
             for (long base : bases)
             {
                 PtrMap m; m.at = at; m.base = base;
@@ -115,8 +117,9 @@ namespace la32
                     if (! m.targets.empty() && t <= m.targets.back()) break;     // timbres are stored in order
                     m.targets.push_back (t); ++m.count;
                 }
-                if (m.count >= minCount) { maps.push_back (m); at += 2 * (size_t) m.count - 2; break; }
+                if (m.count >= minCount) { longest = std::max (longest, m.count); maps.push_back (std::move (m)); }
             }
+            if (longest > 0) at += 2 * (size_t) longest - 2;
         }
         return maps;
     }
@@ -183,7 +186,11 @@ namespace la32
         auto maps = findMaps (c, cs, 10);
         std::vector<const PtrMap*> mel;
         for (auto& m : maps) if (m.count >= 128) { mel.push_back (&m); break; }
-        if (mel.empty()) for (auto& m : maps) if (m.count >= 64 && mel.size() < 2) mel.push_back (&m);
+        // two tables of 64 (group A, group B) that point at different timbres
+        for (size_t i = 0; mel.empty() && i < maps.size(); ++i)
+            for (size_t j = i + 1; j < maps.size(); ++j)
+                if (maps[i].count >= 64 && maps[j].count >= 64 && maps[j].at != maps[i].at && maps[j].targets[0] != maps[i].targets[0])
+                { mel = { &maps[i], &maps[j] }; break; }
         int have = 0; for (auto* m : mel) have += m->count;
         if (have < 128) { error = "timbre tables not found (unsupported control ROM?)"; return nullptr; }
         for (auto* m : mel)
@@ -195,7 +202,7 @@ namespace la32
         const PtrMap* best = nullptr;
         for (auto& m : maps)
         {
-            bool used = false; for (auto* u : mel) if (u == &m) used = true;
+            bool used = false; for (auto* u : mel) if (u->at == m.at) used = true;
             if (! used && (best == nullptr || m.count > best->count)) best = &m;
         }
         if (best != nullptr)
@@ -248,7 +255,31 @@ namespace la32
     }
 
     // ------------------------------------------------------------------ voice
-    inline float envMs (int t) { return t <= 0 ? 0.0f : std::exp2 ((float) t / 7.2f); }
+    // Parameter curves below were fitted to measurements of a reference renderer
+    // (tests/LaCompare: single-parameter sweeps); the code itself is original.
+
+    // envelope segment time (ms) - independent of the distance travelled; doubles every ~7.9 steps
+    inline float envMs (int t) { return t <= 0 ? 0.0f : 3790.0f * std::exp2 ((float) (t - 80) / 7.92f); }
+
+    // linear interpolation in a table sampled every `step` parameter units
+    template <size_t N> inline float lerpTab (const float (&tab)[N], float x, float step)
+    {
+        const float f = juce::jlimit (0.0f, (float) (N - 1), x / step);
+        const int i = juce::jmin ((int) f, (int) N - 2);
+        return tab[i] + (tab[i + 1] - tab[i]) * (f - (float) i);
+    }
+    // TVA level 0..100 -> dB (0 = silent)
+    inline float tvaLevelDb (int level)
+    {
+        static const float t[21] = { -200.0f, -53.5f, -46.6f, -38.5f, -32.8f, -28.3f, -24.9f, -21.5f, -18.8f, -16.6f, -14.3f,
+                                     -12.4f, -10.5f, -9.0f, -7.5f, -6.0f, -4.5f, -3.4f, -2.3f, -1.1f, 0.0f };
+        return lerpTab (t, (float) level, 5.0f);
+    }
+    // TVF cutoff -> log2 Hz of the -6 dB point at key 60. Cutoff 100 is about 1.6 kHz; the TVF
+    // envelope can push the effective value well above 100.
+    inline float tvfCutoffOct (float c) { return 10.617f + (c - 100.0f) * 0.0566f; }
+    // time keyfollow 0..4 -> octaves of time per two octaves of key
+    inline float timeKeyfollow (int k) { static const float t[5] = { 0.0f, 0.19f, 0.38f, 0.75f, 1.5f }; return t[juce::jlimit (0, 4, k)]; }
 
     struct Seg { float target, ms; };
 
@@ -334,33 +365,38 @@ namespace la32
             else
             {
                 phase = 0.0; saw = (p[4] & 1) != 0;
-                float pw = p[6] + (p[7] - 7) / 7.0f * 30.0f * (vel - 0.5f);
-                duty = 0.5f - 0.48f * juce::jlimit (0.0f, 100.0f, pw) / 100.0f;
-                lp.reset();
+                // pulse width only narrows the pulse above 50 (100 -> 1/8 duty)
+                const float pw = juce::jlimit (0.0f, 100.0f, p[6] + (p[7] - 7) / 7.0f * 30.0f * (vel - 0.5f));
+                duty = pw <= 50.0f ? 0.5f : 0.5f * std::exp2 (-2.0f * (pw - 50.0f) / 50.0f);
+                lp.reset(); lp2.reset();
             }
 
             const float tScale = m.time;
-            auto T = [&] (int t, int keyfIdx) { return envMs (t) * tScale * std::exp2 (-(float) (key - 60) / 12.0f * (float) keyfIdx * 0.25f); };
+            auto T = [&] (int t, int keyfIdx) { return envMs (t) * tScale * std::exp2 (-(float) (key - 60) / 24.0f * timeKeyfollow (keyfIdx)); };
 
             // --- pitch envelope (levels -50..+50 -> semitones by depth) ---
-            static const float depthSemis[11] = { 0, 0.5f, 1, 2, 3, 4, 6, 8, 12, 24, 36 };
+            static const float depthSemis[11] = { 0, 0.1f, 0.24f, 0.38f, 0.79f, 1.58f, 3.15f, 6.3f, 12.5f, 25.0f, 50.0f };
             penvRange = depthSemis[juce::jlimit (0, 10, (int) p[8])] * (1.0f - p[9] / 3.0f * (1.0f - vel));
             const int ptk = p[0x0a];
             Seg ps[3] = { { (p[0x10] - 50) / 50.0f, T (p[0x0b], ptk) }, { (p[0x11] - 50) / 50.0f, T (p[0x0c], ptk) }, { (p[0x12] - 50) / 50.0f, T (p[0x0d], ptk) } };
             penv.start ((p[0x0f] - 50) / 50.0f, ps, 3, { (p[0x13] - 50) / 50.0f, T (p[0x0e], ptk) }, false, sr);
 
             // --- LFO ---
-            lfoHz = 0.1f * std::exp2 (p[0x14] / 12.5f);
-            lfoDepth = p[0x15] / 100.0f; lfoModSens = p[0x16] / 100.0f; lfoPhase = 0.0;
+            lfoHz = 1.49f * std::exp2 ((p[0x14] - 50) / 7.92f);
+            lfoDepth = p[0x15] * 0.00568f; lfoModSens = p[0x16] * 0.00568f; lfoPhase = 0.0;
 
             // --- TVF (synth partials only) ---
             if (! pcmMode)
             {
-                cutoffOct = std::log2 (22.0f) + p[0x17] * 0.0985f + m.cutoff * 3.0f;
-                cutoffOct += keyfollow (p[0x19]) * (float) (key - 60) / 12.0f;
-                cutoffOct += biasOct (p[0x1a], (p[0x1b] - 7) * 0.25f, key);
-                res = 2.0f - 1.9f * (p[0x18] / 30.0f);
-                tvfDepth = p[0x1c] / 100.0f * 7.0f * (1.0f - p[0x1d] / 100.0f * (1.0f - vel))
+                cutoffBase = (float) p[0x17];
+                cutoffShift = m.cutoff * 3.0f + keyfollow (p[0x19]) * (float) (key - 60) / 12.0f
+                            + (float) (p[0] - 36) / 12.0f                                       // the cutoff follows coarse tune
+                            + biasOct (p[0x1a], tvfBiasSlope (p[0x1b]), key);
+                // 4-pole: Butterworth pair, resonance raises the Q of the second stage
+                resQ = 1.307f + 4.5f * std::pow (p[0x18] / 30.0f, 6.0f);
+                resDb = -0.19f * (float) p[0x18];                  // resonance costs level (R30 = -5.7 dB)
+                // envelope depth in cutoff units (depth 100 x level 100 = +58); velocity scales it around 64
+                tvfDepth = p[0x1c] * 0.58f * juce::jmax (0.0f, 1.0f + 0.8f * p[0x1d] / 100.0f * (vel * 127.0f - 64.0f) / 63.0f)
                          * std::exp2 (-(float) (key - 60) / 12.0f * p[0x1e] * 0.25f);
                 const int ftk = p[0x1f];
                 Seg fs[4] = { { p[0x25] / 100.0f, T (p[0x20], ftk) }, { p[0x26] / 100.0f, T (p[0x21], ftk) },
@@ -369,17 +405,18 @@ namespace la32
             }
 
             // --- TVA ---
-            float levelDb = 20.0f * std::log10 (juce::jmax (1.0e-4f, std::pow (p[0x29] / 100.0f, 2.0f)));
-            const float s = (p[0x2a] - 50) / 50.0f;
-            levelDb -= std::abs (s) * 36.0f * (s > 0.0f ? (1.0f - vel) : vel);
-            levelDb += biasDb (p[0x2b], p[0x2c], key) + biasDb (p[0x2d], p[0x2e], key);
+            float levelDb = tvaLevelDb (p[0x29]);
+            const float s = (p[0x2a] - 50) / 50.0f, v127 = juce::jlimit (1.0f, 127.0f, vel * 127.0f);
+            levelDb -= std::abs (s) * 0.296f * (s > 0.0f ? 127.0f - v127 : v127 - 1.0f);
+            levelDb += juce::jmax (-54.0f, biasDb (p[0x2b], p[0x2c], key) + biasDb (p[0x2d], p[0x2e], key));
             levelGain = std::pow (10.0f, levelDb / 20.0f);
             const int atk = p[0x2f];
-            const float velT = std::exp2 (-vel * p[0x30] * 0.25f);
+            static const float velTk[5] = { 0.0f, 0.22f, 0.44f, 0.9f, 1.87f };
+            const float velT = std::exp2 (-(v127 - 64.0f) / 63.0f * velTk[juce::jlimit (0, 4, (int) p[0x30])]);
             Seg as[4] = { { p[0x36] / 100.0f, T (p[0x31], atk) * velT }, { p[0x37] / 100.0f, T (p[0x32], atk) },
                           { p[0x38] / 100.0f, T (p[0x33], atk) }, { p[0x39] / 100.0f, T (p[0x34], atk) } };
-            tva.start (0.0f, as, 4, { 0.0f, T (p[0x35], atk) }, noSustain, sr);
-            ctl = 0;
+            tva.start (0.0f, as, 4, { 0.0f, T (p[0x35], atk) / 2.41f }, noSustain, sr);
+            ctl = 0; tvfGain = 1.0f;
         }
 
         void noteOff() { tva.release(); tvf.release(); penv.release(); }
@@ -413,7 +450,7 @@ namespace la32
             {
                 const double inc = 440.0 * std::exp2 ((basePitch - 69.0) / 12.0) * ratio / sr;
                 const double t = phase;
-                if (saw) { y = (float) (2.0 * t - 1.0) - blep (t, inc); }
+                if (saw) { y = 1.26f * ((float) (2.0 * t - 1.0) - blep (t, inc)); }   // +2 dB: same level relation as the reference
                 else
                 {
                     y = t < duty ? 1.0f : -1.0f;
@@ -422,7 +459,7 @@ namespace la32
                     y -= blep (t2, inc);
                 }
                 phase += inc; if (phase >= 1.0) phase -= 1.0;
-                y = lp.process (y, gCut, res);
+                y = lp2.process (lp.process (y, gCut, 1.848f), gCut, res);
             }
             return y * gain;
         }
@@ -435,6 +472,11 @@ namespace la32
             if (t > 1.0 - dt) { t = (t - 1.0) / dt; return (float) (t * t + t + t + 1.0); }
             return 0.0f;
         }
+        static float tvfBiasSlope (int level)
+        {
+            static const float t[15] = { -1.2f, -1.05f, -0.9f, -0.7f, -0.45f, -0.17f, -0.05f, 0.0f, 0.1f, 0.25f, 0.4f, 0.55f, 0.75f, 1.0f, 1.25f };
+            return t[juce::jlimit (0, 14, level)];
+        }
         static float biasOct (int point, float octPerOct, int key)
         {
             const int note = 33 + (point & 63);
@@ -444,9 +486,11 @@ namespace la32
         }
         static float biasDb (int point, int level, int key)
         {
+            // dB per octave away from the bias point: roughly halves every two level steps, 12 = none
+            static const float slope[13] = { 36.0f, 26.5f, 19.3f, 14.0f, 10.2f, 7.5f, 5.4f, 3.9f, 2.6f, 1.7f, 1.1f, 0.5f, 0.0f };
             const int note = 33 + (point & 63);
             const float d = (float) (key - note) / 12.0f;
-            const float dbPerOct = (float) (12 - juce::jlimit (0, 12, level));
+            const float dbPerOct = slope[juce::jlimit (0, 12, level)];
             if (point < 64) return d < 0.0f ? d * dbPerOct : 0.0f;    // below the point
             return d > 0.0f ? -d * dbPerOct : 0.0f;                    // above the point
         }
@@ -462,11 +506,27 @@ namespace la32
             if (! pcmMode)
             {
                 tvf.advance (kCtl);
-                const float oct = cutoffOct + tvf.value * tvfDepth;
-                const float hz = juce::jlimit (20.0f, (float) (sr * 0.45), std::exp2 (oct));
+                // -6 dB point -> 4-pole Butterworth corner (|H| = 1/2 at 1.147 fc)
+                const float oct6 = tvfCutoffOct (cutoffBase + tvf.value * tvfDepth) + cutoffShift;   // -6 dB point
+                const float oct = oct6 - 0.198f;
+                // the LA32 waveform always keeps its fundamental: the corner never drops below it
+                const float f0 = 440.0f * std::exp2 ((basePitch - 69.0f) / 12.0f) * (float) pitchCtl;
+                const float fMin = 1.1f * f0, fc = std::exp2 (oct);
+                const float hz = juce::jlimit (20.0f, (float) (sr * 0.45), juce::jmax (fc, fMin));
+                // no resonant peak while the corner sits on the fundamental; full peak one octave above it
+                const float qb = juce::jlimit (0.0f, 1.0f, std::log2 (juce::jmax (1.0e-3f, fc / fMin)));
+                res = 1.0f / (1.307f + (resQ - 1.307f) * qb);
+                // a cutoff below the fundamental leaves a fading sine (-12.8 dB/oct); resonance costs
+                // level, partly made up by the peak once the corner is clear of the fundamental
+                const float below = juce::jmax (0.0f, std::log2 (f0) - oct6);
+                const float loss = -12.8f * juce::jmin (below, 2.9f) + 13.0f * juce::jmax (0.0f, below - 2.9f);
+                tvfGain = std::pow (10.0f, (juce::jmax (-38.0f, juce::jmin (0.0f, loss)) + resDb * (1.0f - 0.3f * qb)) / 20.0f);
                 gCut = std::tan (juce::MathConstants<float>::pi * hz / (float) sr);
             }
-            const float target = tva.value * tva.value * levelGain;
+            // TVA runs in the log domain: 0.375 dB per level unit, level 0 = off
+            const float v = tva.value;
+            const float envGain = v <= 0.0f ? 0.0f : std::pow (10.0f, (v - 1.0f) * 37.5f / 20.0f) * juce::jmin (1.0f, v * 100.0f);
+            const float target = envGain * levelGain * tvfGain;
             gainStep = (target - gain) / (float) kCtl;
             if (tva.done) finished = true;
         }
@@ -477,17 +537,17 @@ namespace la32
         PcmWave wave;
         bool saw = false, finished = false;
         float duty = 0.5f, basePitch = 60.0f, penvRange = 0, lfoHz = 1, lfoDepth = 0, lfoModSens = 0;
-        float cutoffOct = 14.0f, res = 2.0f, tvfDepth = 0.0f, gCut = 0.5f, levelGain = 1.0f, gain = 0.0f, gainStep = 0.0f;
+        float tvfGain = 1.0f, cutoffBase = 100.0f, cutoffShift = 0.0f, res = 0.765f, resQ = 1.307f, resDb = 0.0f, tvfDepth = 0.0f, gCut = 0.5f, levelGain = 1.0f, gain = 0.0f, gainStep = 0.0f;
         int ctl = 0;
         Env penv, tvf, tva;
-        Lp2 lp;
+        Lp2 lp, lp2;
     };
 
     // partial-pair structures 1..13: which partial is PCM, and how the pair is mixed
     inline void structure (int s, bool& firstPcm, bool& secondPcm, int& mix)
     {
         static const uint8_t pcmBits[13] = { 0, 0, 2, 2, 1, 3, 3, 0, 3, 0, 2, 1, 3 };
-        static const uint8_t mixType[13] = { 0, 1, 0, 1, 1, 0, 1, 3, 3, 2, 2, 2, 2 };
+        static const uint8_t mixType[13] = { 0, 1, 0, 1, 1, 0, 1, 0, 0, 2, 2, 2, 2 };   // 0 a+b, 1 a+ring, 2 ring
         s = juce::jlimit (0, 12, s);
         firstPcm = (pcmBits[s] & 2) != 0; secondPcm = (pcmBits[s] & 1) != 0; mix = mixType[s];
     }
@@ -503,6 +563,7 @@ namespace la32
             for (int pair = 0; pair < 2; ++pair)
             {
                 bool aPcm, bPcm; structure (timbre.common[10 + pair], aPcm, bPcm, mix[pair]);
+                if (! timbre.partialOn (pair * 2) || ! timbre.partialOn (pair * 2 + 1)) mix[pair] = 0;
                 for (int k = 0; k < 2; ++k)
                 {
                     const int idx = pair * 2 + k;
@@ -527,12 +588,10 @@ namespace la32
             {
                 const float a = part[pair * 2].render (pitchMult, modWheel);
                 const float b = part[pair * 2 + 1].render (pitchMult, modWheel);
-                const float ring = 2.0f * a * b;
                 switch (mix[pair])
                 {
-                    case 1:  out += a + ring; break;
-                    case 2:  out += ring; break;
-                    case 3:  out += b + ring; break;
+                    case 1:  out += a + 0.97f * a * b; break;   // partial + ring
+                    case 2:  out += 1.78f * a * b; break;       // ring only
                     default: out += a + b; break;
                 }
             }

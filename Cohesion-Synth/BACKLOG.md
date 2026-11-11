@@ -30,10 +30,22 @@
 - [x] **LA-engine** (MT-32 / CM-32L-compatibel): eigen synthese van het timbreformaat
   (4 partials, synth vierkant/zaag + TVF, PCM-samples uit de ROM, P-ENV/LFO, TVA,
   13 structuren incl. ringmodulatie) + LA-tab; offline getest (tests/LaTest.cpp).
-- [ ] LA-klank fijnslijpen tegen een echte MT-32/PI-MT32 (envelope-tijden, TVF-curve,
-  bias, ringmodulatie-varianten, toonhoogte-keyfollow s1/s2).
+- [x] LA-klank geijkt tegen Munt als meetlat (tests/LaCompare.cpp, alleen lokaal; Munt in
+  `_ref/`, niet in de plugin): envelopes in dB met gemeten tijdcurve, TVA-niveau/velocity/
+  bias-tabellen, 4-polig TVF met absolute cutoff (volgt coarse tune), resonantie, TVF-bias en
+  -velocity, PW, P-ENV-diepte, LFO, structuren 8/9 en ring-niveaus; group-B-tabel MT-32 1.07
+  hersteld. Resultaat over 2 × 128 timbres: niveau-afwijking 1,9 -> 1,1 dB, aanzet 0,70 -> 0,26 oct,
+  release 0,29 -> 0,18 oct, helderheid 0,68/0,86 -> 0,38/0,30 oct.
+- [ ] LA restpunten: Bird Tweet (extreem hoge toon + resonantie, ~-20 dB), sustain-niveau na 1 s
+  (gem. 4 dB), TVF-bias aan de "onder"-kant, LFO-snelheid > 85, P-ENV/TVF release-tijden.
 
 ## COHESION — MT-32 MODULE (fase B, aparte plugin)
+- [ ] **Keuze engine**: Munt (mt32emu, LGPL 2.1+) gebruiken, of als A/B-referentie naast de
+  eigen LA-engine. Gevolgen bij Munt in de plugin: mt32emu als aparte DLL naast de VST3
+  (dynamisch linken, zodat gebruikers hem kunnen vervangen), LGPL-tekst + bronvermelding
+  meeleveren, broncode (of verwijzing) van de gebruikte Munt-versie beschikbaar stellen, en de
+  claim "all DSP is original code" geldt dan niet voor die module. Eigen engine blijft
+  volledig eigen code. Mogelijke opzet: engine-schakelaar MUNT / COHESION LA per instantie.
 - [ ] Multi-timbrale MT-32-emulator op basis van de LA-engine: 8 melodische partijen +
   ritmepartij, elk met eigen MIDI-kanaal (standaard 2–9 + 10), program changes en
   MT-32/CM-32L SysEx (timbres, patches, systeem), 32 partials met voice-allocatie,

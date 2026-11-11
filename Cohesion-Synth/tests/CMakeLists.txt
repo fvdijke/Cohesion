@@ -48,3 +48,16 @@ juce_add_console_app(LaTest PRODUCT_NAME "LaTest")
 target_sources(LaTest PRIVATE LaTest.cpp)
 target_compile_definitions(LaTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(LaTest PRIVATE juce::juce_audio_formats PUBLIC juce::juce_recommended_config_flags)
+
+# Local reference comparison against Munt (mt32emu, LGPL). Only built when Munt has been
+# cloned into ../../_ref/munt (outside git); never linked into the plugin.
+set(MUNT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../_ref/munt/mt32emu")
+if(EXISTS "${MUNT_DIR}/CMakeLists.txt")
+    set(libmt32emu_SHARED OFF CACHE BOOL "" FORCE)
+    set(libmt32emu_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${MUNT_DIR}" munt EXCLUDE_FROM_ALL)
+    juce_add_console_app(LaCompare PRODUCT_NAME "LaCompare")
+    target_sources(LaCompare PRIVATE LaCompare.cpp)
+    target_compile_definitions(LaCompare PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(LaCompare PRIVATE MT32Emu::mt32emu juce::juce_audio_formats juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
+endif()

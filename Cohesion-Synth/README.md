@@ -65,7 +65,10 @@ cmake -S . -B build
 cmake --build build --config Release
 ```
 
-Offline tests (FX, arpeggiator, FM engine, presets, loudness, UI snapshots):
+Offline tests (FX, arpeggiator, FM engine, LA engine, presets, loudness, UI snapshots).
+`LaCompare` is only built when Munt has been cloned into `../_ref/munt` (outside git): a local
+measuring tool that renders the same MT-32 timbres with Munt and with the LA engine. Munt is
+never part of the plugin.
 
 ```bash
 cmake -S tests -B build-tests
