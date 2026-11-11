@@ -275,6 +275,7 @@ struct MidiLed : juce::Component
 #include "FxTab.h"
 #include "LibraryOverlay.h"
 #include "ArpTab.h"
+#include "FmTab.h"
 
 // ===========================================================================
 // Plain component whose paint / layout are supplied by the editor (scaled canvas).
@@ -312,7 +313,8 @@ private:
     void paintCanvas (juce::Graphics&);
     void layoutCanvas();
 
-    juce::TextButton tabs[4];
+    static constexpr int kNumTabs = 5;   // OSC/MIX, FM, FILTER/MOD, FX, ARP
+    juce::TextButton tabs[kNumTabs];
     int currentTab = 0;
 
     // OSC / MIX tab
@@ -321,6 +323,7 @@ private:
     std::unique_ptr<MiniPanel> subPanel, noisePanel;
     std::unique_ptr<MixerPanel> mixer;
 
+    std::unique_ptr<FmTab>            fmTab;
     std::unique_ptr<FilterModTab>     filterTab;
     std::unique_ptr<FxTab>            fxTab;
     std::unique_ptr<ArpTab>           arpTab;

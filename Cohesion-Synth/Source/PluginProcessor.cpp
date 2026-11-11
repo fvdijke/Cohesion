@@ -11,9 +11,12 @@ CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
         auto* v = new SynthVoice();
         v->setSnapshot (&snapshot);
         v->setGlideSource (&lastNoteHz);
+        v->setFmSource (&fmSource);
         synth.addVoice (v);
     }
     presets = cohesionSynthPresets();
+    setFmPatch (dx7::initVoice(), {});
+    loadUserBanks();
     if (! apvts.state.hasProperty ("fxOrder"))
         apvts.state.setProperty ("fxOrder", "0,1,2,3,4", nullptr);
 }
@@ -101,7 +104,134 @@ void CohesionSynthAudioProcessor::loadPreset (int i)
     if (presets.empty()) return;
     const int n = (int) presets.size();
     presetIndex = ((i % n) + n) % n;
-    applySynthPreset (*this, apvts, presets[(size_t) presetIndex]);
+    const auto& pr = presets[(size_t) presetIndex];
+    if (pr.fm != nullptr)
+    {
+        applySynthPreset (*this, apvts, dxInitPreset());
+        setFmPatch (*pr.fm, pr.category);
+    }
+    else applySynthPreset (*this, apvts, pr);
+}
+
+// ---------------------------------------------------------------------------
+//  FM voice: shared with the audio thread under a spin lock, stored in the state.
+// ---------------------------------------------------------------------------
+void CohesionSynthAudioProcessor::setFmPatch (const dx7::Patch& p, const juce::String& bank)
+{
+    { const juce::SpinLock::ScopedLockType sl (fmSource.lock); fmSource.patch = p; }
+    fmBank = bank;
+    const auto d = p.toVced();
+    apvts.state.setProperty ("dxVoice", juce::String::toHexString (d.data(), (int) d.size(), 0), nullptr);
+    apvts.state.setProperty ("dxBank", bank, nullptr);
+    ++fmVersion;
+}
+
+dx7::Patch CohesionSynthAudioProcessor::getFmPatch()
+{
+    const juce::SpinLock::ScopedLockType sl (fmSource.lock);
+    return fmSource.patch;
+}
+
+void CohesionSynthAudioProcessor::restoreFmFromState()
+{
+    const auto hex = apvts.state.getProperty ("dxVoice").toString();
+    if (hex.length() != 310) return;
+    juce::MemoryBlock mb; mb.loadFromHexString (hex);
+    if (mb.getSize() == 155) setFmPatch (dx7::fromVced (static_cast<const uint8_t*> (mb.getData())), apvts.state.getProperty ("dxBank").toString());
+}
+
+// ---------------------------------------------------------------------------
+//  SysEx banks
+// ---------------------------------------------------------------------------
+juce::File CohesionSynthAudioProcessor::userSysExDir()
+{
+    // tests redirect the folder; normal use: %APPDATA%/Pepperwood/Cohesion Synth/SysEx
+    const auto overrideDir = juce::SystemStats::getEnvironmentVariable ("COHESION_SYNTH_SYSEX_DIR", {});
+    if (overrideDir.isNotEmpty()) return juce::File (overrideDir);
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("Pepperwood").getChildFile ("Cohesion Synth").getChildFile ("SysEx");
+}
+
+int CohesionSynthAudioProcessor::addBank (const juce::File& f, ImportResult& r)
+{
+    juce::MemoryBlock mb;
+    if (! f.loadFileAsData (mb)) { r.failed.add (f.getFileName()); return 0; }
+    const auto res = dx7::parseSysEx (mb.getData(), mb.getSize());
+    if (res.voices.empty()) { r.failed.add (f.getFileName()); return 0; }
+
+    auto rel = f.getRelativePathFrom (userSysExDir()).replaceCharacter ('\\', '/');
+    if (rel.startsWith ("..")) rel = f.getFileName();
+    const juce::String category = juce::String::fromUTF8 ("DX7 \xc2\xb7 ") + rel.upToLastOccurrenceOf (".", false, false);
+
+    int added = 0;
+    juce::StringArray namesInBank;
+    for (const auto& v : res.voices)
+    {
+        if (v.isBlank()) { ++r.blank; continue; }
+        const auto d = v.toVced();
+        std::string key (reinterpret_cast<const char*> (d.data()), d.size());
+        if (! fmSeen.insert (key).second) { ++r.duplicates; continue; }
+        juce::String name = v.getName();
+        for (int k = 2; namesInBank.contains (name); ++k) name = v.getName() + " (" + juce::String (k) + ")";
+        namesInBank.add (name);
+        presets.push_back ({ name, category, {}, std::make_shared<const dx7::Patch> (v) });
+        ++added;
+    }
+    if (added > 0 && r.firstCategory.isEmpty()) r.firstCategory = category;
+    r.banks += res.banks + res.singles;
+    r.voices += added;
+    return added;
+}
+
+void CohesionSynthAudioProcessor::loadUserBanks()
+{
+    const auto dir = userSysExDir();
+    if (! dir.isDirectory()) return;
+    auto files = dir.findChildFiles (juce::File::findFiles, true, "*.syx");
+    files.sort();
+    ImportResult r;
+    for (auto& f : files) addBank (f, r);
+}
+
+CohesionSynthAudioProcessor::ImportResult CohesionSynthAudioProcessor::importSysEx (const juce::Array<juce::File>& items)
+{
+    ImportResult r;
+    const auto dir = userSysExDir();
+    dir.createDirectory();
+
+    auto copyIn = [&] (const juce::File& src, juce::File dest)
+    {
+        if (dest.existsAsFile() && dest.getSize() == src.getSize())
+        {
+            juce::MemoryBlock a, b; src.loadFileAsData (a); dest.loadFileAsData (b);
+            if (a == b) return dest;          // already imported
+        }
+        if (dest.existsAsFile()) dest = dest.getNonexistentSibling();
+        dest.getParentDirectory().createDirectory();
+        src.copyFileTo (dest);
+        return dest;
+    };
+
+    for (const auto& item : items)
+    {
+        if (item.isDirectory())
+        {
+            auto files = item.findChildFiles (juce::File::findFiles, true, "*.syx");
+            files.sort();
+            const auto root = dir.getChildFile (item.getFileName());
+            for (auto& f : files)
+            {
+                ++r.files;
+                addBank (copyIn (f, root.getChildFile (f.getRelativePathFrom (item))), r);
+            }
+        }
+        else if (item.existsAsFile())
+        {
+            ++r.files;
+            addBank (copyIn (item, dir.getChildFile (item.getFileName())), r);
+        }
+    }
+    return r;
 }
 
 void CohesionSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -199,6 +329,8 @@ void CohesionSynthAudioProcessor::updateSnapshot()
         snapshot.mod[s] = { ip (pid::modSrc (s)), ip (pid::modDst (s)), f (pid::modAmt (s)) };
 
     snapshot.mainVol = f (pid::mainVol);
+    snapshot.dxOn = bp (pid::dxOn); snapshot.dxLevel = f (pid::dxLevel); snapshot.dxBright = f (pid::dxBright);
+    snapshot.dxTime = f (pid::dxTime); snapshot.dxVel = f (pid::dxVel);
 }
 
 void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -273,6 +405,7 @@ void CohesionSynthAudioProcessor::setStateInformation (const void* data, int siz
         {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             syncFxOrderFromState();
+            restoreFmFromState();
         }
 }
 

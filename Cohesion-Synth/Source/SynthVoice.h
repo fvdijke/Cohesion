@@ -2,6 +2,7 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "SynthDsp.h"
+#include "Dx7.h"
 
 // ===========================================================================
 //  One polyphonic voice. Reads a shared per-block parameter snapshot owned by
@@ -9,6 +10,13 @@
 //  two filters (ladder + SVF) with serial/parallel routing, 4 ADSR envelopes,
 //  4 LFOs and an 8-slot modulation matrix.
 // ===========================================================================
+// The current DX7 voice, shared by all voices (copied at note-on under a spin lock).
+struct FmSource
+{
+    juce::SpinLock lock;
+    dx7::Patch patch;
+};
+
 struct SynthSound : public juce::SynthesiserSound
 {
     bool appliesToNote (int) override    { return true; }
@@ -20,6 +28,7 @@ class SynthVoice : public juce::SynthesiserVoice
 public:
     void setSnapshot (const syn::Snapshot* s) { snap = s; }
     void setGlideSource (double* lastNoteHz)    { lastHz = lastNoteHz; }
+    void setFmSource (FmSource* s)              { fmSrc = s; }
 
     bool canPlaySound (juce::SynthesiserSound* s) override { return dynamic_cast<SynthSound*> (s) != nullptr; }
 
@@ -60,11 +69,19 @@ public:
         applyEnvParams();
         for (auto& e : env) e.noteOn();
         samplesSinceNote = 0;
+        released = false;
+        if (snap->dxOn && fmSrc != nullptr)
+        {
+            dx7::Patch p;
+            { const juce::SpinLock::ScopedLockType sl (fmSrc->lock); p = fmSrc->patch; }
+            fmv.prepare (sr);
+            fmv.noteOn (p, note, velocity, { snap->dxBright, snap->dxTime, snap->dxVel }, rng);
+        }
     }
 
     void stopNote (float, bool allowTailOff) override
     {
-        if (allowTailOff) { for (auto& e : env) e.noteOff(); }
+        if (allowTailOff) { for (auto& e : env) e.noteOff(); fmv.noteOff(); released = true; }
         else              { clearCurrentNote(); for (auto& e : env) e.reset(); }
     }
 
@@ -89,6 +106,8 @@ public:
 
         const float keyTrk = (float) (midiNote - 60) / 24.0f;
         const int   nCh = out.getNumChannels();
+        const bool  fmOnly = snap->dxOn && ! snap->osc[0].on && ! snap->osc[1].on && ! snap->osc[2].on && ! snap->osc[3].on
+                             && ! snap->subOn && ! snap->noiseOn;
 
         for (int s = 0; s < numSamples; ++s)
         {
@@ -131,6 +150,11 @@ public:
                 float sv = sub.next (snap->subWave, pMult) * snap->subLevel;
                 float a = (snap->subPan * 0.5f + 0.5f) * juce::MathConstants<float>::halfPi;
                 sumL += sv * std::cos (a); sumR += sv * std::sin (a);
+            }
+            if (snap->dxOn)
+            {
+                const float fs = fmv.next (pMult) * snap->dxLevel;
+                sumL += fs; sumR += fs;
             }
             if (snap->noiseOn)
             {
@@ -178,7 +202,7 @@ public:
             if (d[6] != 0.0f) lfo[0].setRate (baseLfoRate[0] * std::pow (2.0f, d[6] * 2.0f), sr);
 
             ++samplesSinceNote;
-            if (! env[0].isActive()) { clearCurrentNote(); break; }
+            if (! env[0].isActive() || (fmOnly && released && fmv.isDone())) { clearCurrentNote(); break; }
         }
     }
 
@@ -201,6 +225,9 @@ private:
     int midiNote = 69;
     float vel = 1.0f, velRaw = 1.0f, modWheel = 0.0f;
     double* lastHz = nullptr; double glideOct = 0.0, gCoef = 1.0;
+    FmSource* fmSrc = nullptr;
+    dx7::Voice fmv;
+    bool released = false;
     long samplesSinceNote = 0;
     float baseLfoRate[4] { 2,2,2,2 }, fadeSamp[4] { 0,0,0,0 };
 

@@ -107,6 +107,9 @@ namespace pid
     static const juce::StringArray modSyncItems  { "Free", "1/1", "1/2", "1/4", "1/8", "1/16" };
     static const juce::StringArray echoSyncItems { "Free", "1/2", "1/4", "1/4 D", "1/8", "1/8 D", "1/8 T", "1/16" };
 
+    // --- FM engine (DX7-compatible) ---
+    static const char* dxOn = "dx_on", *dxLevel = "dx_level", *dxBright = "dx_bright", *dxTime = "dx_time", *dxVel = "dx_vel";
+
     // --- ARP ---
     static const char* arpOn = "arp_on", *arpMode = "arp_mode", *arpRate = "arp_rate", *arpOct = "arp_oct",
                      * arpGate = "arp_gate", *arpSwing = "arp_swing", *arpRandom = "arp_random", *arpSync = "arp_sync",
@@ -328,6 +331,13 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     fl (pid::limCeil,  "Limiter Ceiling", lin (-12.0f, 0.0f), -0.3f, "dB");
     fl (pid::limRel,   "Limiter Release", skw (5.0f, 1000.0f, 0.4f), 80.0f, "ms");
     fl (pid::limDrive, "Limiter Drive",   lin (0.0f, 18.0f), 0.0f, "dB");
+
+    // ---------------- FM engine ----------------
+    on (pid::dxOn, "FM On", false);
+    fl (pid::dxLevel,  "FM Level",      lin (0.0f, 1.0f), 0.8f);
+    fl (pid::dxBright, "FM Brightness", lin (-1.0f, 1.0f), 0.0f);
+    fl (pid::dxTime,   "FM Env Time",   skw (0.25f, 4.0f, 0.5f), 1.0f, "x");
+    fl (pid::dxVel,    "FM Velocity",   lin (0.0f, 2.0f), 1.0f, "x");
 
     // ---------------- ARP ----------------
     on (pid::arpOn, "Arp On", false);

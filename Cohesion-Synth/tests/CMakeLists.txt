@@ -38,3 +38,8 @@ juce_add_console_app(PresetRender PRODUCT_NAME "PresetRender")
 target_sources(PresetRender PRIVATE PresetRender.cpp ../Source/PluginProcessor.cpp ../Source/PluginEditor.cpp)
 target_compile_definitions(PresetRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
 target_link_libraries(PresetRender PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(FmTest PRODUCT_NAME "FmTest")
+target_sources(FmTest PRIVATE FmTest.cpp)
+target_compile_definitions(FmTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(FmTest PRIVATE juce::juce_audio_formats PUBLIC juce::juce_recommended_config_flags)

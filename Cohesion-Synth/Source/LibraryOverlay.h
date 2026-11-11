@@ -46,16 +46,53 @@ struct LibraryOverlay : juce::Component
     CatModel catModel { *this };
     PresetModel presetModel { *this };
     juce::ListBox catList { "categories", &catModel }, presetList { "presets", &presetModel };
-    juce::TextButton closeBtn { "X" };
+    juce::TextButton closeBtn { "X" }, importFilesBtn { "IMPORT .SYX" }, importFolderBtn { "IMPORT FOLDER" };
+    std::unique_ptr<juce::FileChooser> chooser;
+    juce::String status;
+
+    // factory categories (Init first, then A-Z), then imported DX7 banks (A-Z)
+    void rebuildCategories()
+    {
+        juce::StringArray factory, imported;
+        for (int i = 0; i < proc.numPresets(); ++i)
+        {
+            const auto c = proc.presetCategory (i);
+            (proc.presetIsImported (i) ? imported : factory).addIfNotAlreadyThere (c);
+        }
+        factory.sortNatural(); imported.sortNatural();
+        if (factory.contains ("Init")) { factory.removeString ("Init"); factory.insert (0, "Init"); }
+        cats.clear();
+        cats.add ("All");
+        cats.addArray (factory);
+        cats.addArray (imported);
+        catList.updateContent();
+    }
+
+    void doImport (bool folder)
+    {
+        chooser = std::make_unique<juce::FileChooser> (folder ? "Import a folder with DX7 SysEx banks" : "Import DX7 SysEx banks",
+                                                       juce::File(), folder ? juce::String() : juce::String ("*.syx"));
+        const int flags = juce::FileBrowserComponent::openMode
+                        | (folder ? juce::FileBrowserComponent::canSelectDirectories
+                                  : juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::canSelectMultipleItems);
+        chooser->launchAsync (flags, [this] (const juce::FileChooser& fc)
+        {
+            const auto items = fc.getResults();
+            if (items.isEmpty()) return;
+            const auto r = proc.importSysEx (items);
+            status = "Imported " + juce::String (r.voices) + " voices from " + juce::String (r.files) + " file(s)"
+                   + (r.duplicates > 0 ? "  |  " + juce::String (r.duplicates) + " duplicates skipped" : juce::String())
+                   + (r.failed.size() > 0 ? "  |  not readable: " + r.failed.joinIntoString (", ") : juce::String());
+            rebuildCategories();
+            selectCategory (r.firstCategory.isNotEmpty() ? juce::jmax (0, cats.indexOf (r.firstCategory)) : selCat, false);
+            catList.scrollToEnsureRowIsOnscreen (selCat);
+            repaint();
+        });
+    }
 
     explicit LibraryOverlay (CohesionSynthAudioProcessor& p) : proc (p)
     {
-        juce::StringArray found;
-        for (int i = 0; i < proc.numPresets(); ++i) found.addIfNotAlreadyThere (proc.presetCategory (i));
-        found.sortNatural();
-        if (found.contains ("Init")) { found.removeString ("Init"); found.insert (0, "Init"); }
-        cats.add ("All");
-        cats.addArray (found);
+        rebuildCategories();
 
         for (auto* lb : { &catList, &presetList })
         {
@@ -68,6 +105,14 @@ struct LibraryOverlay : juce::Component
         closeBtn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0e1013));
         closeBtn.onClick = [this] { close(); };
         addAndMakeVisible (closeBtn);
+        for (auto* b : { &importFilesBtn, &importFolderBtn })
+        {
+            b->setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0f6e56));
+            b->setColour (juce::TextButton::textColourOffId, juce::Colour (0xffeafff6));
+            addAndMakeVisible (*b);
+        }
+        importFilesBtn.onClick  = [this] { doImport (false); };
+        importFolderBtn.onClick = [this] { doImport (true); };
         setWantsKeyboardFocus (true);
     }
 
@@ -123,8 +168,8 @@ struct LibraryOverlay : juce::Component
     void open()
     {
         const int cur = proc.currentPresetIndex();
+        rebuildCategories();
         const int row = juce::jmax (0, cats.indexOf (proc.presetCategory (cur)));
-        catList.updateContent();
         selectCategory (row, true);
         setVisible (true);
         toFront (true);
@@ -148,14 +193,17 @@ struct LibraryOverlay : juce::Component
         g.setFont (juce::Font ("Segoe UI", 12.0f, juce::Font::plain));
         g.drawText ("CATEGORY", catList.getX(), catList.getY() - 20, 160, 16, juce::Justification::centredLeft);
         g.drawText ("PRESET  (" + juce::String ((int) visible.size()) + ")", presetList.getX(), presetList.getY() - 20, 240, 16, juce::Justification::centredLeft);
-        g.drawText ("click = load   |   double-click = load + close   |   Esc = close",
-                    (int) pb.getX(), (int) pb.getBottom() - 28, (int) pb.getWidth(), 18, juce::Justification::centred);
+        if (status.isNotEmpty()) g.setColour (juce::Colour (0xff9fe1cb));
+        g.drawText (status.isNotEmpty() ? status : juce::String ("click = load   |   double-click = load + close   |   Esc = close"),
+                    (int) pb.getX() + 16, (int) pb.getBottom() - 28, (int) pb.getWidth() - 32, 18, juce::Justification::centred);
     }
 
     void resized() override
     {
         auto pb = panelBounds();
         closeBtn.setBounds (pb.getRight() - 44, pb.getY() + 12, 30, 30);
+        importFolderBtn.setBounds (closeBtn.getX() - 10 - 130, pb.getY() + 12, 130, 30);
+        importFilesBtn.setBounds (importFolderBtn.getX() - 8 - 120, pb.getY() + 12, 120, 30);
         auto body = pb.reduced (22).withTrimmedTop (52).withTrimmedBottom (26);
         catList.setBounds (body.removeFromLeft (240));
         body.removeFromLeft (14);

@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 #include "Params.h"
+#include "Dx7.h"
+#include <memory>
 #include "ArpPatterns.h"
 #include "PresetGen.h"
 #include "PresetGains.h"
@@ -17,7 +19,19 @@ struct SynthPreset
 {
     juce::String name, category;
     std::vector<std::pair<juce::String, float>> v;
+    std::shared_ptr<const dx7::Patch> fm;     // imported DX7 voice (v is then empty)
 };
+
+// Base settings for an imported DX7 voice: FM engine only, filters open,
+// the amp envelope out of the way (the operator envelopes shape the sound).
+inline const SynthPreset& dxInitPreset()
+{
+    static const SynthPreset p { "FM", "Init", {
+        { pid::oscOn (1), 0 }, { pid::oscOn (2), 0 }, { pid::dxOn, 1 }, { pid::dxLevel, 0.8f },
+        { pid::fltCutoff, 20000 }, { pid::fltRes, 0.0f },
+        { pid::ampA, 1 }, { pid::ampD, 1 }, { pid::ampS, 1.0f }, { pid::ampR, 8000 } }, nullptr };
+    return p;
+}
 
 inline std::vector<SynthPreset> buildSynthPresets()
 {

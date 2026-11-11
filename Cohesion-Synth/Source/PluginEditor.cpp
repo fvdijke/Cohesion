@@ -39,10 +39,13 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     arpTab    = std::make_unique<ArpTab> (proc);
     canvas.addChildComponent (*fxTab);
     canvas.addChildComponent (*arpTab);
+    fmTab = std::make_unique<FmTab> (proc);
+    fmTab->onOpenLibrary = [this] { library->open(); };
+    canvas.addChildComponent (*fmTab);
 
     // --- tabs ---
-    const char* names[] = { "OSC / MIX", "FILTER / MOD", "FX", "ARP" };
-    for (int i = 0; i < 4; ++i)
+    const char* names[] = { "OSC / MIX", "FM", "FILTER / MOD", "FX", "ARP" };
+    for (int i = 0; i < kNumTabs; ++i)
     {
         tabs[i].setButtonText (names[i]);
         tabs[i].setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0e1013));
@@ -98,10 +101,11 @@ void CohesionSynthAudioProcessorEditor::showTab (int t)
 {
     currentTab = t;
     oscMix.setVisible (t == 0);
-    filterTab->setVisible (t == 1);
-    fxTab->setVisible (t == 2);
-    arpTab->setVisible (t == 3);
-    for (int i = 0; i < 4; ++i)
+    fmTab->setVisible (t == 1);
+    filterTab->setVisible (t == 2);
+    fxTab->setVisible (t == 3);
+    arpTab->setVisible (t == 4);
+    for (int i = 0; i < kNumTabs; ++i)
     {
         tabs[i].setColour (juce::TextButton::buttonColourId, i == t ? juce::Colour (0xff0f6e56) : juce::Colour (0xff0e1013));
         tabs[i].setColour (juce::TextButton::textColourOffId, i == t ? juce::Colour (0xffeafff6) : juce::Colour (0xff9fb0aa));
@@ -158,13 +162,14 @@ void CohesionSynthAudioProcessorEditor::layoutCanvas()
 
     // tabs
     auto tabRow = r.removeFromTop (44).reduced (0, 6);
-    tabRow.removeFromLeft (248 - 0);
-    int tw = 150, gap = 8, tx = 248;
-    for (int i = 0; i < 4; ++i) { tabs[i].setBounds (tx, tabRow.getY(), tw, 32); tx += tw + gap; }
+    const int tw = 140, gap = 8;
+    int tx = (kW - (kNumTabs * tw + (kNumTabs - 1) * gap)) / 2;
+    for (int i = 0; i < kNumTabs; ++i) { tabs[i].setBounds (tx, tabRow.getY(), tw, 32); tx += tw + gap; }
 
     // content
     auto content = r.reduced (16, 6);
     oscMix.setBounds (content);
+    fmTab->setBounds (content);
     filterTab->setBounds (content);
     fxTab->setBounds (content);
     arpTab->setBounds (content);

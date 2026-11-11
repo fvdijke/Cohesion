@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <atomic>
+#include <unordered_set>
 #include "Params.h"
 #include "SynthDsp.h"
 #include "SynthVoice.h"
@@ -49,8 +50,20 @@ public:
     int          currentPresetIndex() const  { return presetIndex; }
     juce::String presetDisplayName (int i) const;
     juce::String presetName (int i) const      { return (i >= 0 && i < (int) presets.size()) ? presets[(size_t) i].name : juce::String(); }
+    bool         presetIsImported (int i) const { return i >= 0 && i < (int) presets.size() && presets[(size_t) i].fm != nullptr; }
     juce::String presetCategory (int i) const  { return (i >= 0 && i < (int) presets.size()) ? presets[(size_t) i].category : juce::String(); }
     void         loadPreset (int i);
+
+    // --- FM engine (DX7 voice) ---
+    void        setFmPatch (const dx7::Patch& p, const juce::String& bank);
+    dx7::Patch  getFmPatch();
+    juce::String getFmBank() const               { return fmBank; }
+    int         getFmVersion() const             { return fmVersion.load(); }
+
+    // --- SysEx import (banks are copied to the user folder and reloaded at start-up) ---
+    struct ImportResult { int files = 0, banks = 0, voices = 0, blank = 0, duplicates = 0; juce::StringArray failed; juce::String firstCategory; };
+    ImportResult importSysEx (const juce::Array<juce::File>& filesOrFolders);
+    static juce::File userSysExDir();
 
     // --- FX chain order (0 COMP, 1 FLANGER, 2 PHASER, 3 ECHO, 4 REVERB) ---
     void  getFxOrder (int* out5) const;
@@ -66,7 +79,14 @@ private:
     void updateFxParams();
     void syncFxOrderFromState();
     void updateArpParams();
+    void loadUserBanks();
+    int  addBank (const juce::File& f, ImportResult& r);
+    void restoreFmFromState();
 
+    FmSource fmSource;
+    std::atomic<int> fmVersion { 0 };
+    juce::String fmBank;
+    std::unordered_set<std::string> fmSeen;
     fx::FxChain  fxChain;
     arp::Engine  arpEngine;
     arp::ArpParams arpp;
