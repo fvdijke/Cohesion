@@ -42,9 +42,12 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     fmTab = std::make_unique<FmTab> (proc);
     fmTab->onOpenLibrary = [this] { library->open(); };
     canvas.addChildComponent (*fmTab);
+    laTab = std::make_unique<LaTab> (proc);
+    laTab->onOpenLibrary = [this] { library->open(); };
+    canvas.addChildComponent (*laTab);
 
     // --- tabs ---
-    const char* names[] = { "OSC / MIX", "FM", "FILTER / MOD", "FX", "ARP" };
+    const char* names[] = { "OSC / MIX", "FM", "LA", "FILTER / MOD", "FX", "ARP" };
     for (int i = 0; i < kNumTabs; ++i)
     {
         tabs[i].setButtonText (names[i]);
@@ -105,9 +108,10 @@ void CohesionSynthAudioProcessorEditor::showTab (int t)
     currentTab = t;
     oscMix.setVisible (t == 0);
     fmTab->setVisible (t == 1);
-    filterTab->setVisible (t == 2);
-    fxTab->setVisible (t == 3);
-    arpTab->setVisible (t == 4);
+    laTab->setVisible (t == 2);
+    filterTab->setVisible (t == 3);
+    fxTab->setVisible (t == 4);
+    arpTab->setVisible (t == 5);
     for (int i = 0; i < kNumTabs; ++i)
     {
         tabs[i].setColour (juce::TextButton::buttonColourId, i == t ? juce::Colour (0xff0f6e56) : juce::Colour (0xff0e1013));
@@ -173,6 +177,7 @@ void CohesionSynthAudioProcessorEditor::layoutCanvas()
     auto content = r.reduced (16, 6);
     oscMix.setBounds (content);
     fmTab->setBounds (content);
+    laTab->setBounds (content);
     filterTab->setBounds (content);
     fxTab->setBounds (content);
     arpTab->setBounds (content);

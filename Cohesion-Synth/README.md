@@ -3,7 +3,7 @@
 Original JUCE/VST3 instrument by **Pepperwood** — part of the [COHESION](../README.md) suite.
 
 A polyphonic hybrid synthesizer: four virtual-analog oscillators plus a **DX7-compatible
-6-operator FM engine**, two filters, a modulation matrix, an FX chain and a programmable
+6-operator FM engine** and an **MT-32 / CM-32L-compatible LA engine**, two filters, a modulation matrix, an FX chain and a programmable
 arpeggiator, in the Cohesion house style. All DSP is original code.
 
 <img src="screenshots/osc-mix.png" width="860" height="520" alt="COHESION - SYNTH · OSC / MIX">
@@ -18,6 +18,13 @@ arpeggiator, in the Cohesion house style. All DSP is original code.
   pitch EG and LFO. Macros: level, brightness, envelope time and velocity.
 
 <img src="screenshots/fm.png" width="860" height="520" alt="COHESION - SYNTH · FM">
+
+- **LA engine (MT-32 / CM-32L-compatible)**: plays the timbres of your own Roland control + PCM
+  ROM dumps (never included) — up to 4 partials per timbre (square/saw with pulse width and a
+  resonant filter, or PCM samples from the ROM), pitch envelope and LFO, amp envelope and the
+  13 partial-pair structures including ring modulation. Macros: level, cutoff, envelope time.
+  **IMPORT ROMS** scans a folder (and the .zip files in it), pairs control and PCM ROMs,
+  skips versions with identical sound and lists each set as `<set> · A / B / Rhythm`.
 
 ## FILTER / MOD
 

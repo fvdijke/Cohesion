@@ -43,3 +43,8 @@ juce_add_console_app(FmTest PRODUCT_NAME "FmTest")
 target_sources(FmTest PRIVATE FmTest.cpp)
 target_compile_definitions(FmTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(FmTest PRIVATE juce::juce_audio_formats PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(LaTest PRODUCT_NAME "LaTest")
+target_sources(LaTest PRIVATE LaTest.cpp)
+target_compile_definitions(LaTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(LaTest PRIVATE juce::juce_audio_formats PUBLIC juce::juce_recommended_config_flags)

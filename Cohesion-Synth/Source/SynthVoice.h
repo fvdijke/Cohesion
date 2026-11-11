@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "SynthDsp.h"
 #include "Dx7.h"
+#include "La32.h"
 
 // ===========================================================================
 //  One polyphonic voice. Reads a shared per-block parameter snapshot owned by
@@ -17,6 +18,14 @@ struct FmSource
     dx7::Patch patch;
 };
 
+// The current LA timbre + its ROM set, shared by all voices (copied at note-on).
+struct LaSource
+{
+    juce::SpinLock lock;
+    std::shared_ptr<const la32::Rom> rom;
+    la32::Timbre timbre;
+};
+
 struct SynthSound : public juce::SynthesiserSound
 {
     bool appliesToNote (int) override    { return true; }
@@ -29,6 +38,7 @@ public:
     void setSnapshot (const syn::Snapshot* s) { snap = s; }
     void setGlideSource (double* lastNoteHz)    { lastHz = lastNoteHz; }
     void setFmSource (FmSource* s)              { fmSrc = s; }
+    void setLaSource (LaSource* s)              { laSrc = s; }
 
     bool canPlaySound (juce::SynthesiserSound* s) override { return dynamic_cast<SynthSound*> (s) != nullptr; }
 
@@ -77,11 +87,17 @@ public:
             fmv.prepare (sr);
             fmv.noteOn (p, note, velocity, { snap->dxBright, snap->dxTime, snap->dxVel }, rng);
         }
+        if (snap->laOn && laSrc != nullptr)
+        {
+            std::shared_ptr<const la32::Rom> r; la32::Timbre t;
+            { const juce::SpinLock::ScopedLockType sl (laSrc->lock); r = laSrc->rom; t = laSrc->timbre; }
+            lav.noteOn (std::move (r), t, note, velocity, { snap->laCutoff, snap->laTime }, sr);
+        }
     }
 
     void stopNote (float, bool allowTailOff) override
     {
-        if (allowTailOff) { for (auto& e : env) e.noteOff(); fmv.noteOff(); released = true; }
+        if (allowTailOff) { for (auto& e : env) e.noteOff(); fmv.noteOff(); lav.noteOff(); released = true; }
         else              { clearCurrentNote(); for (auto& e : env) e.reset(); }
     }
 
@@ -106,7 +122,8 @@ public:
 
         const float keyTrk = (float) (midiNote - 60) / 24.0f;
         const int   nCh = out.getNumChannels();
-        const bool  fmOnly = snap->dxOn && ! snap->osc[0].on && ! snap->osc[1].on && ! snap->osc[2].on && ! snap->osc[3].on
+        // only the FM / LA engines sound: the voice may end as soon as they have finished
+        const bool  fmOnly = (snap->dxOn || snap->laOn) && ! snap->osc[0].on && ! snap->osc[1].on && ! snap->osc[2].on && ! snap->osc[3].on
                              && ! snap->subOn && ! snap->noiseOn;
 
         for (int s = 0; s < numSamples; ++s)
@@ -156,6 +173,11 @@ public:
                 const float fs = fmv.next (pMult) * snap->dxLevel;
                 sumL += fs; sumR += fs;
             }
+            if (snap->laOn)
+            {
+                const float ls = lav.render (pMult, modWheel) * snap->laLevel;
+                sumL += ls; sumR += ls;
+            }
             if (snap->noiseOn)
             {
                 float nz = noise.next (snap->noiseType) * snap->noiseLevel;
@@ -202,7 +224,8 @@ public:
             if (d[6] != 0.0f) lfo[0].setRate (baseLfoRate[0] * std::pow (2.0f, d[6] * 2.0f), sr);
 
             ++samplesSinceNote;
-            if (! env[0].isActive() || (fmOnly && released && fmv.isDone())) { clearCurrentNote(); break; }
+            if (! env[0].isActive() || (fmOnly && released && (! snap->laOn || lav.isDone()) && (! snap->dxOn || fmv.isDone())))
+            { clearCurrentNote(); break; }
         }
     }
 
@@ -227,6 +250,8 @@ private:
     double* lastHz = nullptr; double glideOct = 0.0, gCoef = 1.0;
     FmSource* fmSrc = nullptr;
     dx7::Voice fmv;
+    LaSource* laSrc = nullptr;
+    la32::Voice lav;
     bool released = false;
     long samplesSinceNote = 0;
     float baseLfoRate[4] { 2,2,2,2 }, fadeSamp[4] { 0,0,0,0 };

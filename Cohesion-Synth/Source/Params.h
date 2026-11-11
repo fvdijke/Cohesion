@@ -110,6 +110,9 @@ namespace pid
     // --- FM engine (DX7-compatible) ---
     static const char* dxOn = "dx_on", *dxLevel = "dx_level", *dxBright = "dx_bright", *dxTime = "dx_time", *dxVel = "dx_vel";
 
+    // --- LA engine (MT-32 / CM-32L) ---
+    static const char* laOn = "la_on", *laLevel = "la_level", *laCutoff = "la_cutoff", *laTime = "la_time";
+
     // --- ARP ---
     static const char* arpOn = "arp_on", *arpMode = "arp_mode", *arpRate = "arp_rate", *arpOct = "arp_oct",
                      * arpGate = "arp_gate", *arpSwing = "arp_swing", *arpRandom = "arp_random", *arpSync = "arp_sync",
@@ -338,6 +341,12 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     fl (pid::dxBright, "FM Brightness", lin (-1.0f, 1.0f), 0.0f);
     fl (pid::dxTime,   "FM Env Time",   skw (0.25f, 4.0f, 0.5f), 1.0f, "x");
     fl (pid::dxVel,    "FM Velocity",   lin (0.0f, 2.0f), 1.0f, "x");
+
+    // ---------------- LA engine ----------------
+    on (pid::laOn, "LA On", false);
+    fl (pid::laLevel,  "LA Level",  lin (0.0f, 1.0f), 0.8f);
+    fl (pid::laCutoff, "LA Cutoff", lin (-1.0f, 1.0f), 0.0f);
+    fl (pid::laTime,   "LA Env Time", skw (0.25f, 4.0f, 0.5f), 1.0f, "x");
 
     // ---------------- ARP ----------------
     on (pid::arpOn, "Arp On", false);

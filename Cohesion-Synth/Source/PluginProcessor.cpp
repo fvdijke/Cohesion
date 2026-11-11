@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <map>
 
 CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
     : juce::AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -12,11 +13,13 @@ CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
         v->setSnapshot (&snapshot);
         v->setGlideSource (&lastNoteHz);
         v->setFmSource (&fmSource);
+        v->setLaSource (&laSource);
         synth.addVoice (v);
     }
     presets = cohesionSynthPresets();
     setFmPatch (dx7::initVoice(), {});
     loadUserBanks();
+    loadUserRoms();
     if (! apvts.state.hasProperty ("fxOrder"))
         apvts.state.setProperty ("fxOrder", "0,1,2,3,4", nullptr);
 }
@@ -110,6 +113,12 @@ void CohesionSynthAudioProcessor::loadPreset (int i)
         applySynthPreset (*this, apvts, dxInitPreset());
         setFmPatch (*pr.fm, pr.category);
     }
+    else if (pr.la != nullptr)
+    {
+        applySynthPreset (*this, apvts, laInitPreset());
+        const auto& list = pr.laRhythm ? pr.la->rhythm : pr.la->melodic;
+        if (pr.laIndex >= 0 && pr.laIndex < (int) list.size()) setLaTimbre (pr.la, list[(size_t) pr.laIndex], pr.category);
+    }
     else applySynthPreset (*this, apvts, pr);
 }
 
@@ -138,6 +147,177 @@ void CohesionSynthAudioProcessor::restoreFmFromState()
     if (hex.length() != 310) return;
     juce::MemoryBlock mb; mb.loadFromHexString (hex);
     if (mb.getSize() == 155) setFmPatch (dx7::fromVced (static_cast<const uint8_t*> (mb.getData())), apvts.state.getProperty ("dxBank").toString());
+}
+
+// ---------------------------------------------------------------------------
+//  LA engine: current timbre (shared with the audio thread) + ROM sets
+// ---------------------------------------------------------------------------
+void CohesionSynthAudioProcessor::setLaTimbre (std::shared_ptr<const la32::Rom> rom, const la32::Timbre& t, const juce::String& bank)
+{
+    { const juce::SpinLock::ScopedLockType sl (laSource.lock); laSource.rom = rom; laSource.timbre = t; }
+    laBank = bank;
+    juce::MemoryBlock mb; mb.append (t.common, 14); for (int k = 0; k < 4; ++k) mb.append (t.partial[k], 58);
+    apvts.state.setProperty ("laTimbre", juce::String::toHexString (mb.getData(), (int) mb.getSize(), 0), nullptr);
+    apvts.state.setProperty ("laRom", rom != nullptr ? rom->label : juce::String(), nullptr);
+    apvts.state.setProperty ("laBank", bank, nullptr);
+    ++laVersion;
+}
+
+std::pair<std::shared_ptr<const la32::Rom>, la32::Timbre> CohesionSynthAudioProcessor::getLaTimbre()
+{
+    const juce::SpinLock::ScopedLockType sl (laSource.lock);
+    return { laSource.rom, laSource.timbre };
+}
+
+void CohesionSynthAudioProcessor::restoreLaFromState()
+{
+    const auto hex = apvts.state.getProperty ("laTimbre").toString();
+    if (hex.length() != 246 * 2) return;
+    juce::MemoryBlock mb; mb.loadFromHexString (hex);
+    if (mb.getSize() != 246) return;
+    la32::Timbre t;
+    auto* d = static_cast<const uint8_t*> (mb.getData());
+    std::memcpy (t.common, d, 14); std::memcpy (t.name, d, 10);
+    for (int k = 0; k < 4; ++k) std::memcpy (t.partial[k], d + 14 + 58 * k, 58);
+    const auto label = apvts.state.getProperty ("laRom").toString();
+    std::shared_ptr<const la32::Rom> rom;
+    for (auto& r : romSets) if (r->label == label) rom = r;
+    if (rom == nullptr && ! romSets.empty()) rom = romSets.front();   // ROM set no longer present: closest fallback
+    setLaTimbre (rom, t, apvts.state.getProperty ("laBank").toString());
+}
+
+juce::File CohesionSynthAudioProcessor::userRomDir()
+{
+    const auto overrideDir = juce::SystemStats::getEnvironmentVariable ("COHESION_SYNTH_ROM_DIR", {});
+    if (overrideDir.isNotEmpty()) return juce::File (overrideDir);
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("Pepperwood").getChildFile ("Cohesion Synth").getChildFile ("ROMs");
+}
+
+// ROM sets are shared between plugin instances (decoded PCM is ~2-4 MB per set).
+static std::shared_ptr<const la32::Rom> loadRomFolderCached (const juce::File& dir)
+{
+    static juce::CriticalSection lock;
+    static std::map<juce::String, std::weak_ptr<const la32::Rom>> cache;
+    const juce::ScopedLock sl (lock);
+    if (auto hit = cache[dir.getFullPathName()].lock()) return hit;
+    juce::MemoryBlock c, p; juce::String err;
+    if (! dir.getChildFile ("control.rom").loadFileAsData (c) || ! dir.getChildFile ("pcm.rom").loadFileAsData (p)) return nullptr;
+    std::shared_ptr<const la32::Rom> rom = la32::load (c, p, dir.getFileName(), err);
+    if (rom != nullptr)
+    {
+        auto copy = std::make_shared<la32::Rom> (*rom);
+        copy->label = dir.getFileName();                  // the folder name is the set's stable label
+        rom = copy;
+        cache[dir.getFullPathName()] = rom;
+    }
+    return rom;
+}
+
+bool CohesionSynthAudioProcessor::addRomSet (std::shared_ptr<const la32::Rom> rom, RomImportResult* r)
+{
+    for (auto& s : romSets) if (s->contentHash == rom->contentHash) { if (r) ++r->duplicates; return false; }
+    romSets.push_back (rom);
+    const juce::String dot = juce::String::fromUTF8 (" \xc2\xb7 ");
+    for (int i = 0; i < (int) rom->melodic.size(); ++i)
+    {
+        SynthPreset p { rom->melodic[(size_t) i].getName(), rom->label + dot + (i < 64 ? "A" : "B"), {}, nullptr };
+        p.la = rom; p.laIndex = i; p.laRhythm = false;
+        presets.push_back (std::move (p));
+    }
+    for (int i = 0; i < (int) rom->rhythm.size(); ++i)
+    {
+        SynthPreset p { rom->rhythm[(size_t) i].getName(), rom->label + dot + "Rhythm", {}, nullptr };
+        p.la = rom; p.laIndex = i; p.laRhythm = true;
+        presets.push_back (std::move (p));
+    }
+    if (r) { ++r->sets; if (r->firstCategory.isEmpty()) r->firstCategory = rom->label + dot + "A"; }
+    return true;
+}
+
+void CohesionSynthAudioProcessor::loadUserRoms()
+{
+    const auto dir = userRomDir();
+    if (! dir.isDirectory()) return;
+    auto sets = dir.findChildFiles (juce::File::findDirectories, false);
+    sets.sort();
+    for (auto& d : sets)
+        if (auto rom = loadRomFolderCached (d)) addRomSet (rom, nullptr);
+}
+
+CohesionSynthAudioProcessor::RomImportResult CohesionSynthAudioProcessor::importRoms (const juce::Array<juce::File>& items)
+{
+    RomImportResult r;
+    struct Blob { juce::String name, container; juce::MemoryBlock data; };
+    std::vector<Blob> controls, pcms;
+
+    auto consider = [&] (const juce::String& name, const juce::String& container, juce::MemoryBlock data)
+    {
+        const auto n = data.getSize();
+        if (n == 65536 || n == 131072)        controls.push_back ({ name, container, std::move (data) });
+        else if (n == 524288 || n == 1048576) pcms.push_back ({ name, container, std::move (data) });
+    };
+    auto readZip = [&] (const juce::File& z)
+    {
+        juce::ZipFile zip (z);
+        for (int i = 0; i < zip.getNumEntries(); ++i)
+        {
+            const auto* e = zip.getEntry (i);
+            if (e == nullptr || ! (e->uncompressedSize == 65536 || e->uncompressedSize == 131072
+                                                     || e->uncompressedSize == 524288 || e->uncompressedSize == 1048576)) continue;
+            std::unique_ptr<juce::InputStream> in (zip.createStreamForEntry (i));
+            if (in == nullptr) continue;
+            juce::MemoryBlock mb; in->readIntoMemoryBlock (mb);
+            consider (e->filename, z.getFullPathName(), std::move (mb));
+        }
+    };
+    auto readFile = [&] (const juce::File& f)
+    {
+        ++r.files;
+        if (f.hasFileExtension ("zip")) { readZip (f); return; }
+        const auto sz = f.getSize();
+        if (sz != 65536 && sz != 131072 && sz != 524288 && sz != 1048576) return;
+        juce::MemoryBlock mb; if (f.loadFileAsData (mb)) consider (f.getFileName(), f.getParentDirectory().getFullPathName(), std::move (mb));
+    };
+    for (const auto& item : items)
+    {
+        if (item.isDirectory())
+        {
+            auto files = item.findChildFiles (juce::File::findFiles, true, "*");
+            files.sort();
+            for (auto& f : files) readFile (f);
+        }
+        else if (item.existsAsFile()) readFile (item);
+    }
+
+    const auto dir = userRomDir();
+    for (auto& c : controls)
+    {
+        // try PCM ROMs from the same folder / zip first
+        std::vector<const Blob*> order;
+        for (auto& p : pcms) if (p.container == c.container) order.push_back (&p);
+        for (auto& p : pcms) if (p.container != c.container) order.push_back (&p);
+        std::shared_ptr<const la32::Rom> rom;
+        const Blob* pcmUsed = nullptr;
+        for (auto* p : order)
+        {
+            juce::String err;
+            if ((rom = la32::load (c.data, p->data, c.name, err)) != nullptr) { pcmUsed = p; break; }
+        }
+        if (rom == nullptr) { r.failed.add (c.name); continue; }
+        bool dup = false; for (auto& s : romSets) if (s->contentHash == rom->contentHash) dup = true;
+        if (dup) { ++r.duplicates; continue; }
+
+        // store the pair as <model version>/control.rom + pcm.rom
+        juce::String label = rom->model + (rom->version.isNotEmpty() ? " " + rom->version : juce::String());
+        auto setDir = dir.getChildFile (juce::File::createLegalFileName (label));
+        for (int k = 2; setDir.exists(); ++k) setDir = dir.getChildFile (juce::File::createLegalFileName (label + " (" + juce::String (k) + ")"));
+        setDir.createDirectory();
+        setDir.getChildFile ("control.rom").replaceWithData (c.data.getData(), c.data.getSize());
+        setDir.getChildFile ("pcm.rom").replaceWithData (pcmUsed->data.getData(), pcmUsed->data.getSize());
+        if (auto stored = loadRomFolderCached (setDir)) addRomSet (stored, &r);
+    }
+    return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +511,7 @@ void CohesionSynthAudioProcessor::updateSnapshot()
     snapshot.mainVol = f (pid::mainVol);
     snapshot.dxOn = bp (pid::dxOn); snapshot.dxLevel = f (pid::dxLevel); snapshot.dxBright = f (pid::dxBright);
     snapshot.dxTime = f (pid::dxTime); snapshot.dxVel = f (pid::dxVel);
+    snapshot.laOn = bp (pid::laOn); snapshot.laLevel = f (pid::laLevel); snapshot.laCutoff = f (pid::laCutoff); snapshot.laTime = f (pid::laTime);
 }
 
 void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -406,6 +587,7 @@ void CohesionSynthAudioProcessor::setStateInformation (const void* data, int siz
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             syncFxOrderFromState();
             restoreFmFromState();
+            restoreLaFromState();
         }
 }
 

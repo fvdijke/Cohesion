@@ -50,7 +50,7 @@ public:
     int          currentPresetIndex() const  { return presetIndex; }
     juce::String presetDisplayName (int i) const;
     juce::String presetName (int i) const      { return (i >= 0 && i < (int) presets.size()) ? presets[(size_t) i].name : juce::String(); }
-    bool         presetIsImported (int i) const { return i >= 0 && i < (int) presets.size() && presets[(size_t) i].fm != nullptr; }
+    bool         presetIsImported (int i) const { return i >= 0 && i < (int) presets.size() && (presets[(size_t) i].fm != nullptr || presets[(size_t) i].la != nullptr); }
     juce::String presetCategory (int i) const  { return (i >= 0 && i < (int) presets.size()) ? presets[(size_t) i].category : juce::String(); }
     void         loadPreset (int i);
 
@@ -64,6 +64,16 @@ public:
     struct ImportResult { int files = 0, banks = 0, voices = 0, blank = 0, duplicates = 0; juce::StringArray failed; juce::String firstCategory; };
     ImportResult importSysEx (const juce::Array<juce::File>& filesOrFolders);
     static juce::File userSysExDir();
+
+    // --- LA engine (MT-32 / CM-32L ROM sets) ---
+    void setLaTimbre (std::shared_ptr<const la32::Rom> rom, const la32::Timbre& t, const juce::String& bank);
+    std::pair<std::shared_ptr<const la32::Rom>, la32::Timbre> getLaTimbre();
+    juce::String getLaBank() const               { return laBank; }
+    int          getLaVersion() const            { return laVersion.load(); }
+    int          numRomSets() const              { return (int) romSets.size(); }
+    struct RomImportResult { int sets = 0, duplicates = 0, files = 0; juce::StringArray failed; juce::String firstCategory; };
+    RomImportResult importRoms (const juce::Array<juce::File>& filesFoldersOrZips);
+    static juce::File userRomDir();
 
     // --- FX chain order (0 COMP, 1 FLANGER, 2 PHASER, 3 ECHO, 4 REVERB) ---
     void  getFxOrder (int* out5) const;
@@ -82,8 +92,15 @@ private:
     void loadUserBanks();
     int  addBank (const juce::File& f, ImportResult& r);
     void restoreFmFromState();
+    void loadUserRoms();
+    bool addRomSet (std::shared_ptr<const la32::Rom> rom, RomImportResult* r);
+    void restoreLaFromState();
 
     FmSource fmSource;
+    LaSource laSource;
+    std::atomic<int> laVersion { 0 };
+    juce::String laBank;
+    std::vector<std::shared_ptr<const la32::Rom>> romSets;
     std::atomic<int> fmVersion { 0 };
     juce::String fmBank;
     std::unordered_set<std::string> fmSeen;

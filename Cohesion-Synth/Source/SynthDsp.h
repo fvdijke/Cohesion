@@ -48,6 +48,7 @@ namespace syn
         float mainVol = 0.8f;
         float glideMs = 0.0f;   // portamento (arp SLIDE)
         bool  dxOn = false; float dxLevel = 0.8f, dxBright = 0.0f, dxTime = 1.0f, dxVel = 1.0f;
+        bool  laOn = false; float laLevel = 0.8f, laCutoff = 0.0f, laTime = 1.0f;
     };
 
     inline float polyBlep (double t, double dt)

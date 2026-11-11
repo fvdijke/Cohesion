@@ -4,6 +4,7 @@
 #include <vector>
 #include "Params.h"
 #include "Dx7.h"
+#include "La32.h"
 #include <memory>
 #include "ArpPatterns.h"
 #include "PresetGen.h"
@@ -20,7 +21,19 @@ struct SynthPreset
     juce::String name, category;
     std::vector<std::pair<juce::String, float>> v;
     std::shared_ptr<const dx7::Patch> fm;     // imported DX7 voice (v is then empty)
+    std::shared_ptr<const la32::Rom> la;      // MT-32 / CM-32L timbre from an imported ROM set
+    int laIndex = -1; bool laRhythm = false;
 };
+
+// Base settings for an LA (MT-32 / CM-32L) timbre: LA engine only, filters open.
+inline const SynthPreset& laInitPreset()
+{
+    static const SynthPreset p { "LA", "Init", {
+        { pid::oscOn (1), 0 }, { pid::oscOn (2), 0 }, { pid::laOn, 1 }, { pid::laLevel, 0.8f },
+        { pid::fltCutoff, 20000 }, { pid::fltRes, 0.0f },
+        { pid::ampA, 1 }, { pid::ampD, 1 }, { pid::ampS, 1.0f }, { pid::ampR, 8000 } }, nullptr };
+    return p;
+}
 
 // Base settings for an imported DX7 voice: FM engine only, filters open,
 // the amp envelope out of the way (the operator envelopes shape the sound).

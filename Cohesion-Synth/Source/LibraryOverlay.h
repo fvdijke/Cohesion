@@ -46,7 +46,7 @@ struct LibraryOverlay : juce::Component
     CatModel catModel { *this };
     PresetModel presetModel { *this };
     juce::ListBox catList { "categories", &catModel }, presetList { "presets", &presetModel };
-    juce::TextButton closeBtn { "X" }, importFilesBtn { "IMPORT .SYX" }, importFolderBtn { "IMPORT FOLDER" };
+    juce::TextButton closeBtn { "X" }, importFilesBtn { "IMPORT .SYX" }, importFolderBtn { "SYX FOLDER" }, importRomsBtn { "IMPORT ROMS" };
     std::unique_ptr<juce::FileChooser> chooser;
     juce::String status;
 
@@ -90,6 +90,25 @@ struct LibraryOverlay : juce::Component
         });
     }
 
+    void doImportRoms()
+    {
+        chooser = std::make_unique<juce::FileChooser> ("Choose a folder with MT-32 / CM-32L ROM dumps (.zip files inside are scanned too)", juce::File());
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this] (const juce::FileChooser& fc)
+        {
+            const auto items = fc.getResults();
+            if (items.isEmpty()) return;
+            const auto r = proc.importRoms (items);
+            status = "ROM sets added: " + juce::String (r.sets)
+                   + (r.duplicates > 0 ? "  |  " + juce::String (r.duplicates) + " duplicate version(s) skipped" : juce::String())
+                   + (r.failed.size() > 0 ? "  |  not recognised: " + r.failed.joinIntoString (", ") : juce::String());
+            if (r.sets == 0 && r.duplicates == 0 && r.failed.isEmpty()) status = "No MT-32 / CM-32L control + PCM ROM pair found in that folder";
+            rebuildCategories();
+            selectCategory (r.firstCategory.isNotEmpty() ? juce::jmax (0, cats.indexOf (r.firstCategory)) : selCat, false);
+            catList.scrollToEnsureRowIsOnscreen (selCat);
+            repaint();
+        });
+    }
+
     explicit LibraryOverlay (CohesionSynthAudioProcessor& p) : proc (p)
     {
         rebuildCategories();
@@ -105,7 +124,7 @@ struct LibraryOverlay : juce::Component
         closeBtn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0e1013));
         closeBtn.onClick = [this] { close(); };
         addAndMakeVisible (closeBtn);
-        for (auto* b : { &importFilesBtn, &importFolderBtn })
+        for (auto* b : { &importFilesBtn, &importFolderBtn, &importRomsBtn })
         {
             b->setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0f6e56));
             b->setColour (juce::TextButton::textColourOffId, juce::Colour (0xffeafff6));
@@ -113,6 +132,7 @@ struct LibraryOverlay : juce::Component
         }
         importFilesBtn.onClick  = [this] { doImport (false); };
         importFolderBtn.onClick = [this] { doImport (true); };
+        importRomsBtn.onClick   = [this] { doImportRoms(); };
         setWantsKeyboardFocus (true);
     }
 
@@ -202,8 +222,9 @@ struct LibraryOverlay : juce::Component
     {
         auto pb = panelBounds();
         closeBtn.setBounds (pb.getRight() - 44, pb.getY() + 12, 30, 30);
-        importFolderBtn.setBounds (closeBtn.getX() - 10 - 130, pb.getY() + 12, 130, 30);
-        importFilesBtn.setBounds (importFolderBtn.getX() - 8 - 120, pb.getY() + 12, 120, 30);
+        importRomsBtn.setBounds (closeBtn.getX() - 10 - 120, pb.getY() + 12, 120, 30);
+        importFolderBtn.setBounds (importRomsBtn.getX() - 8 - 110, pb.getY() + 12, 110, 30);
+        importFilesBtn.setBounds (importFolderBtn.getX() - 8 - 110, pb.getY() + 12, 110, 30);
         auto body = pb.reduced (22).withTrimmedTop (52).withTrimmedBottom (26);
         catList.setBounds (body.removeFromLeft (240));
         body.removeFromLeft (14);

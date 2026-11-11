@@ -7,6 +7,9 @@
 - [x] **DX7 SysEx-import** (32-voice banks + single voices, bestanden of hele map):
   banks worden bewaard in %APPDATA%/Pepperwood/Cohesion Synth/SysEx en verschijnen
   als categorie "DX7 · <bank>"; lege plekken en dubbelen worden overgeslagen.
+- [x] **MT-32 / CM-32L ROM-import** (IMPORT ROMS: map, zips worden mee gescand): control- en
+  PCM-ROM worden zelf gekoppeld, identieke klankversies overgeslagen; sets bewaard in
+  %APPDATA%/Pepperwood/Cohesion Synth/ROMs, categorieën "<set> · A / B / Rhythm".
 - [ ] Library-zoekfunctie (nodig bij grote collecties, bv. MiniDexed ~100k voices).
 - [ ] Geïmporteerde DX7-voices in luidheid gelijktrekken (zoals de factory-presets).
 - [ ] **SysEx bank-samensteller**: voices uit verschillende .syx-bestanden kiezen
@@ -24,6 +27,17 @@
 - [x] Filter 2 (SVF multimode) + serie/parallel-routing.
 - [x] 4 LFO's + 4 envelopes + mod-matrix (8 slots).
 - [ ] Wavetable-modus (WT) met WT POS-morph.
+- [x] **LA-engine** (MT-32 / CM-32L-compatibel): eigen synthese van het timbreformaat
+  (4 partials, synth vierkant/zaag + TVF, PCM-samples uit de ROM, P-ENV/LFO, TVA,
+  13 structuren incl. ringmodulatie) + LA-tab; offline getest (tests/LaTest.cpp).
+- [ ] LA-klank fijnslijpen tegen een echte MT-32/PI-MT32 (envelope-tijden, TVF-curve,
+  bias, ringmodulatie-varianten, toonhoogte-keyfollow s1/s2).
+
+## COHESION — MT-32 MODULE (fase B, aparte plugin)
+- [ ] Multi-timbrale MT-32-emulator op basis van de LA-engine: 8 melodische partijen +
+  ritmepartij, elk met eigen MIDI-kanaal (standaard 2–9 + 10), program changes en
+  MT-32/CM-32L SysEx (timbres, patches, systeem), 32 partials met voice-allocatie,
+  ritme-toetsindeling uit de ROM, reverb en echo, mixer per partij.
 - [x] FM-engine (DX7-compatibel, 6 operators, 32 algoritmes, operator-EG's, feedback,
   ratio/fixed, velocity, key scaling, pitch-EG, LFO) + FM-tab; offline getest
   (tests/FmTest.cpp).
