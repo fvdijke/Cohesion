@@ -97,6 +97,30 @@ inline std::vector<SynthPreset> cohesionSynthPresets()
         { pid::modSrc (0), 1 }, { pid::modDst (0), 1 }, { pid::modAmt (0), 0.7f }, { pid::lfoRate (1), 0.2f }, { pid::lfoWave (1), 0 },
         { pid::ampA, 500 }, { pid::ampS, 1.0f }, { pid::ampR, 1000 } } });
 
+    // ---- FX per preset ----
+    auto addFx = [&] (const char* name, V extra)
+    {
+        for (auto& p : out) if (p.name == name) p.v.insert (p.v.end(), extra.begin(), extra.end());
+    };
+    addFx ("Sub Driver",  V { { pid::compOn, 1 }, { pid::compThresh, -20 }, { pid::compRatio, 3 }, { pid::compMakeup, 3 } });
+    addFx ("Reese",       V { { pid::compOn, 1 }, { pid::compThresh, -18 }, { pid::compRatio, 4 }, { pid::compMakeup, 4 },
+                              { pid::rvOn, 1 }, { pid::rvMix, 0.12f }, { pid::rvSize, 0.5f }, { pid::rvDecay, 0.4f } });
+    addFx ("Acid",        V { { pid::compOn, 1 }, { pid::compThresh, -16 }, { pid::compRatio, 3 }, { pid::compMakeup, 2 },
+                              { pid::ecOn, 1 }, { pid::ecSync, 5 }, { pid::ecFb, 0.35f }, { pid::ecMix, 0.2f }, { pid::ecDamp, 0.5f } });
+    addFx ("Super Saw",   V { { pid::ecOn, 1 }, { pid::ecSync, 5 }, { pid::ecFb, 0.3f }, { pid::ecMix, 0.18f }, { pid::ecPing, 1 },
+                              { pid::rvOn, 1 }, { pid::rvMix, 0.2f }, { pid::rvSize, 0.7f }, { pid::rvDecay, 0.55f } });
+    addFx ("Square Lead", V { { pid::ecOn, 1 }, { pid::ecSync, 2 }, { pid::ecFb, 0.3f }, { pid::ecMix, 0.2f },
+                              { pid::rvOn, 1 }, { pid::rvMix, 0.12f } });
+    addFx ("Pluck",       V { { pid::ecOn, 1 }, { pid::ecSync, 4 }, { pid::ecFb, 0.35f }, { pid::ecMix, 0.22f }, { pid::ecPing, 1 },
+                              { pid::rvOn, 1 }, { pid::rvMix, 0.15f } });
+    addFx ("Soft EP",     V { { pid::phOn, 1 }, { pid::phRate, 0.25f }, { pid::phDepth, 0.5f }, { pid::phMix, 0.35f },
+                              { pid::rvOn, 1 }, { pid::rvMix, 0.18f } });
+    addFx ("Warm Pad",    V { { pid::rvOn, 1 }, { pid::rvMix, 0.32f }, { pid::rvSize, 0.75f }, { pid::rvDecay, 0.65f } });
+    addFx ("Glass Pad",   V { { pid::rvOn, 1 }, { pid::rvMix, 0.38f }, { pid::rvSize, 0.85f }, { pid::rvDecay, 0.7f }, { pid::rvPre, 40 } });
+    addFx ("Ensemble",    V { { pid::flOn, 1 }, { pid::flRate, 0.15f }, { pid::flDepth, 0.3f }, { pid::flFb, 0.1f }, { pid::flDelay, 4.0f }, { pid::flMix, 0.3f },
+                              { pid::rvOn, 1 }, { pid::rvMix, 0.3f }, { pid::rvSize, 0.7f }, { pid::rvDecay, 0.6f } });
+    addFx ("Noise Sweep", V { { pid::rvOn, 1 }, { pid::rvMix, 0.45f }, { pid::rvSize, 1.0f }, { pid::rvDecay, 0.8f } });
+
     return out;
 }
 

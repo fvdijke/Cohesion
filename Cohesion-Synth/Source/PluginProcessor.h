@@ -6,6 +6,7 @@
 #include "SynthDsp.h"
 #include "SynthVoice.h"
 #include "Presets.h"
+#include "FxDsp.h"
 
 class CohesionSynthAudioProcessor : public juce::AudioProcessor
 {
@@ -25,7 +26,7 @@ public:
     bool acceptsMidi() const override  { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    double getTailLengthSeconds() const override { return 12.0; }   // reverb / echo tails
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -47,8 +48,22 @@ public:
     juce::String presetDisplayName (int i) const;
     void         loadPreset (int i);
 
+    // --- FX chain order (0 COMP, 1 FLANGER, 2 PHASER, 3 ECHO, 4 REVERB) ---
+    void  getFxOrder (int* out5) const;
+    void  setFxOrder (const int* in5);          // message thread; stored in the plugin state
+    float getCompGainReductionDb() const        { return fxChain.comp.grDb.load(); }
+    double getFxBpm() const                     { return fxBpm.load(); }
+
 private:
     void updateSnapshot();
+    void updateFxParams();
+    void syncFxOrderFromState();
+
+    fx::FxChain  fxChain;
+    fx::FxParams fxp;
+    std::atomic<int> fxOrder[fx::kNumFx] { {0}, {1}, {2}, {3}, {4} };
+    std::atomic<double> fxBpm { 120.0 };
+    juce::AudioBuffer<float> monoScratch;
 
     juce::Synthesiser synth;
     syn::Snapshot snapshot;

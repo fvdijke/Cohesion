@@ -13,6 +13,67 @@ CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
         synth.addVoice (v);
     }
     presets = cohesionSynthPresets();
+    if (! apvts.state.hasProperty ("fxOrder"))
+        apvts.state.setProperty ("fxOrder", "0,1,2,3,4", nullptr);
+}
+
+// ---------------------------------------------------------------------------
+//  FX order (kept as a property of the plugin state, not as a parameter).
+// ---------------------------------------------------------------------------
+static bool parseFxOrder (const juce::String& s, int* out)
+{
+    auto toks = juce::StringArray::fromTokens (s, ",", "");
+    if (toks.size() != fx::kNumFx) return false;
+    bool seen[fx::kNumFx] {};
+    for (int k = 0; k < fx::kNumFx; ++k)
+    {
+        const int v = toks[k].trim().getIntValue();
+        if (v < 0 || v >= fx::kNumFx || seen[v]) return false;
+        seen[v] = true; out[k] = v;
+    }
+    return true;
+}
+
+void CohesionSynthAudioProcessor::getFxOrder (int* out5) const
+{
+    for (int k = 0; k < fx::kNumFx; ++k) out5[k] = fxOrder[k].load();
+}
+
+void CohesionSynthAudioProcessor::setFxOrder (const int* in5)
+{
+    juce::StringArray s;
+    for (int k = 0; k < fx::kNumFx; ++k) s.add (juce::String (in5[k]));
+    int chk[fx::kNumFx];
+    if (! parseFxOrder (s.joinIntoString (","), chk)) return;
+    for (int k = 0; k < fx::kNumFx; ++k) fxOrder[k].store (chk[k]);
+    apvts.state.setProperty ("fxOrder", s.joinIntoString (","), nullptr);
+}
+
+void CohesionSynthAudioProcessor::syncFxOrderFromState()
+{
+    int o[fx::kNumFx] = { 0, 1, 2, 3, 4 };
+    if (! parseFxOrder (apvts.state.getProperty ("fxOrder").toString(), o))
+        for (int k = 0; k < fx::kNumFx; ++k) o[k] = k;
+    for (int k = 0; k < fx::kNumFx; ++k) fxOrder[k].store (o[k]);
+}
+
+void CohesionSynthAudioProcessor::updateFxParams()
+{
+    auto f  = [this] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
+    auto ip = [this] (const char* id) { return (int) apvts.getRawParameterValue (id)->load(); };
+    auto bp = [this] (const char* id) { return apvts.getRawParameterValue (id)->load() > 0.5f; };
+    fxp.compOn = bp (pid::compOn); fxp.compThresh = f (pid::compThresh); fxp.compRatio = f (pid::compRatio);
+    fxp.compAtk = f (pid::compAtk); fxp.compRel = f (pid::compRel); fxp.compMakeup = f (pid::compMakeup);
+    fxp.compKnee = f (pid::compKnee); fxp.compMix = f (pid::compMix);
+    fxp.flOn = bp (pid::flOn); fxp.flRate = f (pid::flRate); fxp.flDepth = f (pid::flDepth); fxp.flFb = f (pid::flFb);
+    fxp.flDelay = f (pid::flDelay); fxp.flWidth = f (pid::flWidth); fxp.flSync = ip (pid::flSync); fxp.flMix = f (pid::flMix);
+    fxp.phOn = bp (pid::phOn); fxp.phRate = f (pid::phRate); fxp.phDepth = f (pid::phDepth); fxp.phFb = f (pid::phFb);
+    fxp.phStages = ip (pid::phStages); fxp.phSpread = f (pid::phSpread); fxp.phSync = ip (pid::phSync); fxp.phMix = f (pid::phMix);
+    fxp.ecOn = bp (pid::ecOn); fxp.ecTime = f (pid::ecTime); fxp.ecSync = ip (pid::ecSync); fxp.ecFb = f (pid::ecFb);
+    fxp.ecDamp = f (pid::ecDamp); fxp.ecWidth = f (pid::ecWidth); fxp.ecPing = bp (pid::ecPing); fxp.ecMix = f (pid::ecMix);
+    fxp.rvOn = bp (pid::rvOn); fxp.rvSize = f (pid::rvSize); fxp.rvDecay = f (pid::rvDecay); fxp.rvPre = f (pid::rvPre);
+    fxp.rvDamp = f (pid::rvDamp); fxp.rvWidth = f (pid::rvWidth); fxp.rvLowCut = f (pid::rvLowCut); fxp.rvMix = f (pid::rvMix);
+    fxp.limOn = bp (pid::limOn); fxp.limCeil = f (pid::limCeil);
 }
 
 juce::String CohesionSynthAudioProcessor::presetDisplayName (int i) const
@@ -29,10 +90,13 @@ void CohesionSynthAudioProcessor::loadPreset (int i)
     applySynthPreset (*this, apvts, presets[(size_t) presetIndex]);
 }
 
-void CohesionSynthAudioProcessor::prepareToPlay (double sampleRate, int)
+void CohesionSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     synth.setCurrentPlaybackSampleRate (sampleRate);
     updateSnapshot();
+    fxChain.prepare (sampleRate, samplesPerBlock);
+    monoScratch.setSize (1, juce::jmax (64, samplesPerBlock));
+    setLatencySamples (fxChain.lim.latency());
 }
 
 bool CohesionSynthAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -131,8 +195,38 @@ void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
         if (meta.getMessage().isNoteOn()) { midiActivity.store (1); break; }
 
     updateSnapshot();
-    synth.renderNextBlock (buffer, midi, 0, buffer.getNumSamples());
-    buffer.applyGain (snapshot.mainVol);
+    const int n = buffer.getNumSamples();
+    synth.renderNextBlock (buffer, midi, 0, n);
+
+    // --- FX chain (in the user's order) -> MAIN -> limiter ---
+    updateFxParams();
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+            if (auto bpm = pos->getBpm())
+                if (*bpm > 20.0 && *bpm < 400.0) fxp.bpm = *bpm;
+    fxBpm.store (fxp.bpm);
+
+    int order[fx::kNumFx];
+    for (int k = 0; k < fx::kNumFx; ++k) order[k] = fxOrder[k].load();
+
+    float* L = buffer.getWritePointer (0);
+    float* R = nullptr;
+    const bool mono = buffer.getNumChannels() < 2;
+    if (mono)
+    {
+        if (monoScratch.getNumSamples() < n) monoScratch.setSize (1, n, false, false, true);
+        R = monoScratch.getWritePointer (0);
+        juce::FloatVectorOperations::copy (R, L, n);
+    }
+    else R = buffer.getWritePointer (1);
+
+    fxChain.process (L, R, n, fxp, order);
+    juce::FloatVectorOperations::multiply (L, snapshot.mainVol, n);
+    juce::FloatVectorOperations::multiply (R, snapshot.mainVol, n);
+    fxChain.lim.process (L, R, n, fxp);
+
+    if (mono)
+        for (int i = 0; i < n; ++i) L[i] = 0.5f * (L[i] + R[i]);
 }
 
 juce::AudioProcessorEditor* CohesionSynthAudioProcessor::createEditor()
@@ -150,7 +244,10 @@ void CohesionSynthAudioProcessor::setStateInformation (const void* data, int siz
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
+        {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            syncFxOrderFromState();
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

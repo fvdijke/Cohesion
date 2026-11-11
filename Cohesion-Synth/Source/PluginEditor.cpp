@@ -30,7 +30,7 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     addChildComponent (*filterTab);
 
     // --- placeholder tabs ---
-    fxTab     = std::make_unique<PlaceholderPanel> ("FX  —  coming soon");
+    fxTab     = std::make_unique<FxTab> (proc);
     arpTab    = std::make_unique<PlaceholderPanel> ("ARP  —  coming soon");
     addChildComponent (*fxTab);
     addChildComponent (*arpTab);

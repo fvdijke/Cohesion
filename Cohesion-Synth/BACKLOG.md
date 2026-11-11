@@ -15,9 +15,12 @@
 - [ ] Filter 2 (SVF multimode) + serie/parallel-routing.
 - [ ] 4 LFO's + 4 envelopes volledig + mod-matrix.
 - [ ] Wavetable-modus (WT) met WT POS-morph.
-- [ ] FX-keten (reverb/echo/comp/phaser/flanger + limiter).
+- [x] FX-keten (comp/flanger/phaser/echo/reverb + limiter), versleepbare volgorde,
+  klikvrij aan/uit, tempo-sync; offline getest met `tests/FxTest.cpp`.
 - [ ] Arpeggiator.
 
 ## GUI
 - [x] MIDI-indicator in de header (zichtbaar op elke tab) — tijdelijke controle.
-- [ ] FILTER/MOD-, FX- en ARP-tabs uitwerken volgens de mockups.
+- [x] FILTER/MOD-tab.
+- [x] FX-tab.
+- [ ] ARP-tab uitwerken volgens de mockup.

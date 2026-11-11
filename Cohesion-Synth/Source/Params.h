@@ -91,6 +91,22 @@ namespace pid
     static const juce::StringArray modDests   { "Off", "Filter 1 Cutoff", "Filter 2 Cutoff",
                                                 "Pitch", "Amp", "Pan", "LFO 1 Rate" };
 
+    // --- FX ---
+    static const char* compOn = "fx_comp_on", *compThresh = "fx_comp_thresh", *compRatio = "fx_comp_ratio", *compAtk = "fx_comp_attack",
+                     * compRel = "fx_comp_release", *compMakeup = "fx_comp_makeup", *compKnee = "fx_comp_knee", *compMix = "fx_comp_mix";
+    static const char* flOn = "fx_fl_on", *flRate = "fx_fl_rate", *flDepth = "fx_fl_depth", *flFb = "fx_fl_fb",
+                     * flDelay = "fx_fl_delay", *flWidth = "fx_fl_width", *flSync = "fx_fl_sync", *flMix = "fx_fl_mix";
+    static const char* phOn = "fx_ph_on", *phRate = "fx_ph_rate", *phDepth = "fx_ph_depth", *phFb = "fx_ph_fb",
+                     * phStages = "fx_ph_stages", *phSpread = "fx_ph_spread", *phSync = "fx_ph_sync", *phMix = "fx_ph_mix";
+    static const char* ecOn = "fx_ec_on", *ecTime = "fx_ec_time", *ecSync = "fx_ec_sync", *ecFb = "fx_ec_fb",
+                     * ecDamp = "fx_ec_damp", *ecWidth = "fx_ec_width", *ecPing = "fx_ec_ping", *ecMix = "fx_ec_mix";
+    static const char* rvOn = "fx_rv_on", *rvSize = "fx_rv_size", *rvDecay = "fx_rv_decay", *rvPre = "fx_rv_pre",
+                     * rvDamp = "fx_rv_damp", *rvWidth = "fx_rv_width", *rvLowCut = "fx_rv_lowcut", *rvMix = "fx_rv_mix";
+    static const char* limOn = "fx_lim_on", *limCeil = "fx_lim_ceil";
+
+    static const juce::StringArray modSyncItems  { "Free", "1/1", "1/2", "1/4", "1/8", "1/16" };
+    static const juce::StringArray echoSyncItems { "Free", "1/2", "1/4", "1/4 D", "1/8", "1/8 D", "1/8 T", "1/16" };
+
     // --- global ---
     static const char* mainVol = "main_vol";
 }
@@ -207,6 +223,66 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
         p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::modDst (s), 1 }, "Mod " + String (s + 1) + " Dst", pid::modDests, 0));
         p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::modAmt (s), 1 }, "Mod " + String (s + 1) + " Amt", NormalisableRange<float> (-1.0f, 1.0f, 0.0001f), 0.0f));
     }
+
+    // ---------------- FX ----------------
+    auto fl = [&] (const char* id, const char* name, NormalisableRange<float> r, float def, const char* unit = "")
+    {
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { id, 1 }, name, r,  def,
+                                                            AudioParameterFloatAttributes().withLabel (unit)));
+    };
+    auto on = [&] (const char* id, const char* name, bool def) { p.push_back (std::make_unique<AudioParameterBool> (ParameterID { id, 1 }, name, def)); };
+    auto ch = [&] (const char* id, const char* name, const StringArray& items, int def)
+    { p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { id, 1 }, name, items, def)); };
+    auto lin = [] (float a, float b) { return NormalisableRange<float> (a, b, 0.0f); };
+    auto skw = [] (float a, float b, float s) { return NormalisableRange<float> (a, b, 0.0f, s); };
+
+    on (pid::compOn, "Comp On", false);
+    fl (pid::compThresh, "Comp Threshold", lin (-60.0f, 0.0f), -18.0f, "dB");
+    fl (pid::compRatio,  "Comp Ratio",     skw (1.0f, 20.0f, 0.4f), 4.0f, ":1");
+    fl (pid::compAtk,    "Comp Attack",    skw (0.1f, 100.0f, 0.35f), 10.0f, "ms");
+    fl (pid::compRel,    "Comp Release",   skw (10.0f, 1000.0f, 0.4f), 150.0f, "ms");
+    fl (pid::compMakeup, "Comp Makeup",    lin (0.0f, 24.0f), 0.0f, "dB");
+    fl (pid::compKnee,   "Comp Knee",      lin (0.0f, 12.0f), 6.0f, "dB");
+    fl (pid::compMix,    "Comp Mix",       lin (0.0f, 1.0f), 1.0f);
+
+    on (pid::flOn, "Flanger On", false);
+    fl (pid::flRate,  "Flanger Rate",     skw (0.02f, 10.0f, 0.35f), 0.3f, "Hz");
+    fl (pid::flDepth, "Flanger Depth",    lin (0.0f, 1.0f), 0.6f);
+    fl (pid::flFb,    "Flanger Feedback", lin (-0.95f, 0.95f), 0.5f);
+    fl (pid::flDelay, "Flanger Delay",    skw (0.5f, 10.0f, 0.5f), 2.0f, "ms");
+    fl (pid::flWidth, "Flanger Width",    lin (0.0f, 1.0f), 0.8f);
+    ch (pid::flSync,  "Flanger Sync",     pid::modSyncItems, 0);
+    fl (pid::flMix,   "Flanger Mix",      lin (0.0f, 1.0f), 0.5f);
+
+    on (pid::phOn, "Phaser On", false);
+    fl (pid::phRate,   "Phaser Rate",     skw (0.02f, 10.0f, 0.35f), 0.4f, "Hz");
+    fl (pid::phDepth,  "Phaser Depth",    lin (0.0f, 1.0f), 0.7f);
+    fl (pid::phFb,     "Phaser Feedback", lin (-0.95f, 0.95f), 0.5f);
+    ch (pid::phStages, "Phaser Stages",   StringArray { "2", "4", "6", "8", "12" }, 1);
+    fl (pid::phSpread, "Phaser Spread",   lin (0.0f, 1.0f), 0.5f);
+    ch (pid::phSync,   "Phaser Sync",     pid::modSyncItems, 0);
+    fl (pid::phMix,    "Phaser Mix",      lin (0.0f, 1.0f), 0.5f);
+
+    on (pid::ecOn, "Echo On", false);
+    fl (pid::ecTime,  "Echo Time",     skw (10.0f, 2000.0f, 0.4f), 375.0f, "ms");
+    ch (pid::ecSync,  "Echo Sync",     pid::echoSyncItems, 0);
+    fl (pid::ecFb,    "Echo Feedback", lin (0.0f, 0.95f), 0.4f);
+    fl (pid::ecDamp,  "Echo Damp",     lin (0.0f, 1.0f), 0.3f);
+    fl (pid::ecWidth, "Echo Width",    lin (0.0f, 1.0f), 0.7f);
+    on (pid::ecPing,  "Echo PingPong", false);
+    fl (pid::ecMix,   "Echo Mix",      lin (0.0f, 1.0f), 0.25f);
+
+    on (pid::rvOn, "Reverb On", false);
+    fl (pid::rvSize,   "Reverb Size",    lin (0.0f, 1.0f), 0.6f);
+    fl (pid::rvDecay,  "Reverb Decay",   lin (0.0f, 1.0f), 0.5f);
+    fl (pid::rvPre,    "Reverb Predelay", skw (0.0f, 250.0f, 0.5f), 20.0f, "ms");
+    fl (pid::rvDamp,   "Reverb Damp",    lin (0.0f, 1.0f), 0.4f);
+    fl (pid::rvWidth,  "Reverb Width",   lin (0.0f, 1.0f), 1.0f);
+    fl (pid::rvLowCut, "Reverb Low Cut", skw (20.0f, 1000.0f, 0.4f), 120.0f, "Hz");
+    fl (pid::rvMix,    "Reverb Mix",     lin (0.0f, 1.0f), 0.25f);
+
+    on (pid::limOn, "Limiter On", true);
+    fl (pid::limCeil, "Limiter Ceiling", lin (-12.0f, 0.0f), -0.3f, "dB");
 
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::mainVol, 1 }, "Main", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.8f));
 
