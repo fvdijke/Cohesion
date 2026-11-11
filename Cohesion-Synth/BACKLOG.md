@@ -1,8 +1,11 @@
 # COHESION — SYNTH · backlog
 
 ## Presets
-- [ ] **50 fabriekspresets** — nu 42 in 12 categorieën (Init, Arp, Bass, Drums,
-  Flute, FX, Keys, Lead, Pad, Pluck, Strings, Synth); nog 8 te gaan.
+- [x] **100 presets per categorie** (1.101 totaal): handgemaakt + procedurele generator
+  (10 archetypes per categorie), elke preset offline gerenderd en in luidheid
+  gelijkgetrokken (tests/PresetRender -> Source/PresetGains.h).
+- [ ] **SysEx-import** om presets toe te voegen — wacht op een voorbeeldbestand
+  (welk merk/model?) om het formaat te bepalen.
 - [x] LIBRARY-venster (categorieën → presets) naast de preset-kiezer.
 - [x] 16 ARP-patronen (step-sequencer presets).
 - [ ] **Presets voor alle General MIDI-instrumenten** (de 128 GM-programma's),
@@ -26,4 +29,5 @@
 - [x] FILTER/MOD-tab.
 - [x] FX-tab.
 - [x] ARP-tab.
+- [x] Resizable (60–200%, vaste verhouding, grootte onthouden).
 - [x] Limiter-paneel (drive / ceiling / release + GR-meter); knoppen dimmen bij FX uit.

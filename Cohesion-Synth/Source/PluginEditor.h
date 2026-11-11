@@ -277,6 +277,15 @@ struct MidiLed : juce::Component
 #include "ArpTab.h"
 
 // ===========================================================================
+// Plain component whose paint / layout are supplied by the editor (scaled canvas).
+struct Canvas : juce::Component
+{
+    std::function<void (juce::Graphics&)> onPaint;
+    std::function<void()> onResized;
+    void paint (juce::Graphics& g) override { if (onPaint) onPaint (g); }
+    void resized() override                 { if (onResized) onResized(); }
+};
+
 class CohesionSynthAudioProcessorEditor : public juce::AudioProcessorEditor,
                                           private juce::Timer
 {
@@ -298,6 +307,10 @@ private:
 
     CohesionSynthAudioProcessor& proc;
     CohesionLookAndFeel lnf;
+    static constexpr int kW = 1040, kH = 720;
+    Canvas canvas;
+    void paintCanvas (juce::Graphics&);
+    void layoutCanvas();
 
     juce::TextButton tabs[4];
     int currentTab = 0;

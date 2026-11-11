@@ -23,5 +23,7 @@ int main (int argc, char** argv)
     const char* names[] = { "1-osc-mix", "2-filter-mod", "3-fx", "4-arp" };
     for (int t = 0; t < 4; ++t) { ed->showTab (t); save (names[t]); }
     ed->showTab (0); ed->openLibrary(); save ("5-library");
+    ed->setSize (728, 504);   ed->showTab (3); save ("6-scaled-70");
+    ed->setSize (1560, 1080); ed->showTab (2); save ("7-scaled-150");
     return 0;
 }

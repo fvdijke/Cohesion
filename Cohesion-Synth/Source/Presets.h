@@ -4,6 +4,9 @@
 #include <vector>
 #include "Params.h"
 #include "ArpPatterns.h"
+#include "PresetGen.h"
+#include "PresetGains.h"
+#include <unordered_map>
 
 // ===========================================================================
 //  Factory presets (foundation set). Each preset lists only the parameters it
@@ -16,7 +19,7 @@ struct SynthPreset
     std::vector<std::pair<juce::String, float>> v;
 };
 
-inline std::vector<SynthPreset> cohesionSynthPresets()
+inline std::vector<SynthPreset> buildSynthPresets()
 {
     using V = std::vector<std::pair<juce::String, float>>;
     std::vector<SynthPreset> out;
@@ -247,7 +250,7 @@ inline std::vector<SynthPreset> cohesionSynthPresets()
     P ("Pan Flute", "Flute", V {
         { pid::oscOn (1), 1 }, { pid::oscWave (1), 3 }, { pid::oscLevel (1), 0.75f }, { pid::oscOn (2), 0 },
         { pid::noiseOn, 1 }, { pid::noiseLevel, 0.18f },
-        { pid::fltCutoff, 6000 }, { pid::flt2Type, 2 }, { pid::flt2Cutoff, 2500 }, { pid::flt2Res, 0.45f }, { pid::flt2KeyTrk, 0.8f },
+        { pid::fltCutoff, 6000 }, { pid::flt2Type, 2 }, { pid::flt2Cutoff, 350 }, { pid::flt2Res, 0.3f }, { pid::flt2KeyTrk, 1.0f }, { pid::fltRouting, 1 }, { pid::fltBalance, 0.4f }, { pid::flt2Slope, 0 },
         { pid::modSrc (0), 1 }, { pid::modDst (0), 3 }, { pid::modAmt (0), 0.008f }, { pid::lfoRate (1), 5.0f }, { pid::lfoFade (1), 300 },
         { pid::ampA, 40 }, { pid::ampD, 200 }, { pid::ampS, 0.8f }, { pid::ampR, 300 },
         { pid::ecOn, 1 }, { pid::ecSync, 2 }, { pid::ecMix, 0.12f }, { pid::rvOn, 1 }, { pid::rvMix, 0.35f } });
@@ -402,7 +405,41 @@ inline std::vector<SynthPreset> cohesionSynthPresets()
         { pid::ecOn, 1 }, { pid::ecSync, 5 }, { pid::ecMix, 0.2f } }));
     juce::ignoreUnused (off2);
 
+
+    // =====================================================================
+    //  Fill every category up to 100 presets with the procedural generator
+    // =====================================================================
+    for (const auto& cat : pgen::categories())
+    {
+        juce::StringArray taken;
+        for (auto& p : out) if (p.category == cat.name) taken.add (p.name);
+        if (taken.size() < 100)
+            pgen::generate (cat, 100 - taken.size(), taken, out);
+    }
+
+    // ---- loudness matching (measured offline by tests/PresetRender) ----
+    static const std::unordered_map<std::string, std::pair<float, float>> levels = []
+    {
+        std::unordered_map<std::string, std::pair<float, float>> m;
+        for (auto& e : kPresetLevels) if (e.key[0] != 0) m[e.key] = { e.level, e.drive };
+        return m;
+    }();
+    for (auto& p : out)
+    {
+        const auto it = levels.find ((p.category + "/" + p.name).toStdString());
+        if (it == levels.end()) continue;
+        p.v.push_back ({ pid::mainVol, it->second.first });
+        if (it->second.second > 0.0f) p.v.push_back ({ pid::limDrive, it->second.second });
+    }
+
     return out;
+}
+
+// Built once per process and shared by every plugin instance.
+inline const std::vector<SynthPreset>& cohesionSynthPresets()
+{
+    static const std::vector<SynthPreset> all = buildSynthPresets();
+    return all;
 }
 
 inline void applySynthPreset (juce::AudioProcessor& proc, juce::AudioProcessorValueTreeState& apvts, const SynthPreset& preset)

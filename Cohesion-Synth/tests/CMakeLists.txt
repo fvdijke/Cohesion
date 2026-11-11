@@ -33,3 +33,8 @@ juce_add_console_app(UiSnapshot PRODUCT_NAME "UiSnapshot")
 target_sources(UiSnapshot PRIVATE UiSnapshot.cpp ../Source/PluginProcessor.cpp ../Source/PluginEditor.cpp)
 target_compile_definitions(UiSnapshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_STANDALONE_APPLICATION=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
 target_link_libraries(UiSnapshot PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(PresetRender PRODUCT_NAME "PresetRender")
+target_sources(PresetRender PRIVATE PresetRender.cpp ../Source/PluginProcessor.cpp ../Source/PluginEditor.cpp)
+target_compile_definitions(PresetRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(PresetRender PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
