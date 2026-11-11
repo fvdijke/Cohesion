@@ -102,10 +102,21 @@ namespace pid
                      * ecDamp = "fx_ec_damp", *ecWidth = "fx_ec_width", *ecPing = "fx_ec_ping", *ecMix = "fx_ec_mix";
     static const char* rvOn = "fx_rv_on", *rvSize = "fx_rv_size", *rvDecay = "fx_rv_decay", *rvPre = "fx_rv_pre",
                      * rvDamp = "fx_rv_damp", *rvWidth = "fx_rv_width", *rvLowCut = "fx_rv_lowcut", *rvMix = "fx_rv_mix";
-    static const char* limOn = "fx_lim_on", *limCeil = "fx_lim_ceil";
+    static const char* limOn = "fx_lim_on", *limCeil = "fx_lim_ceil", *limRel = "fx_lim_release", *limDrive = "fx_lim_drive";
 
     static const juce::StringArray modSyncItems  { "Free", "1/1", "1/2", "1/4", "1/8", "1/16" };
     static const juce::StringArray echoSyncItems { "Free", "1/2", "1/4", "1/4 D", "1/8", "1/8 D", "1/8 T", "1/16" };
+
+    // --- ARP ---
+    static const char* arpOn = "arp_on", *arpMode = "arp_mode", *arpRate = "arp_rate", *arpOct = "arp_oct",
+                     * arpGate = "arp_gate", *arpSwing = "arp_swing", *arpRandom = "arp_random", *arpSync = "arp_sync",
+                     * arpHold = "arp_hold", *arpLatch = "arp_latch", *arpTempo = "arp_tempo", *arpSteps = "arp_steps",
+                     * arpOrder = "arp_order", *arpVelAmt = "arp_velamt", *arpSlide = "arp_slide", *arpHuman = "arp_humanize";
+    inline juce::String arpStepOn  (int i) { return "arp_s" + juce::String (i) + "_on"; }
+    inline juce::String arpStepVel (int i) { return "arp_s" + juce::String (i) + "_vel"; }
+    static const juce::StringArray arpModes  { "Up", "Down", "Up / Down", "Down / Up", "Random", "Chord" };
+    static const juce::StringArray arpRates  { "1/4", "1/8", "1/8 T", "1/16", "1/16 T", "1/32" };
+    static const juce::StringArray arpOrders { "As Played", "Low > High", "High > Low" };
 
     // --- global ---
     static const char* mainVol = "main_vol";
@@ -171,7 +182,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::flt2Type, 1 }, "Filter 2 Type", StringArray { "LP", "HP", "BP", "Notch" }, 0));
     {
         NormalisableRange<float> cut (20.0f, 20000.0f, 0.0f, 0.3f);
-        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::flt2Cutoff, 1 }, "Filter 2 Cutoff", cut, 8000.0f));
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::flt2Cutoff, 1 }, "Filter 2 Cutoff", cut, 20000.0f));
     }
     p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::flt2Res, 1 }, "Filter 2 Res", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.12f));
     p.push_back (std::make_unique<AudioParameterFloat>  (ParameterID { pid::flt2Drive, 1 }, "Filter 2 Drive", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
@@ -282,7 +293,33 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     fl (pid::rvMix,    "Reverb Mix",     lin (0.0f, 1.0f), 0.25f);
 
     on (pid::limOn, "Limiter On", true);
-    fl (pid::limCeil, "Limiter Ceiling", lin (-12.0f, 0.0f), -0.3f, "dB");
+    fl (pid::limCeil,  "Limiter Ceiling", lin (-12.0f, 0.0f), -0.3f, "dB");
+    fl (pid::limRel,   "Limiter Release", skw (5.0f, 1000.0f, 0.4f), 80.0f, "ms");
+    fl (pid::limDrive, "Limiter Drive",   lin (0.0f, 18.0f), 0.0f, "dB");
+
+    // ---------------- ARP ----------------
+    on (pid::arpOn, "Arp On", false);
+    ch (pid::arpMode,  "Arp Mode",  pid::arpModes, 0);
+    ch (pid::arpRate,  "Arp Rate",  pid::arpRates, 3);
+    p.push_back (std::make_unique<AudioParameterInt> (ParameterID { pid::arpOct, 1 }, "Arp Octaves", 1, 4, 1));
+    fl (pid::arpGate,   "Arp Gate",   lin (0.05f, 1.0f), 0.7f);
+    fl (pid::arpSwing,  "Arp Swing",  lin (0.0f, 0.75f), 0.0f);
+    fl (pid::arpRandom, "Arp Random", lin (0.0f, 1.0f), 0.0f);
+    on (pid::arpSync,  "Arp Sync",  true);
+    on (pid::arpHold,  "Arp Hold",  false);
+    on (pid::arpLatch, "Arp Latch", false);
+    fl (pid::arpTempo, "Arp Tempo", lin (40.0f, 240.0f), 120.0f, "BPM");
+    p.push_back (std::make_unique<AudioParameterInt> (ParameterID { pid::arpSteps, 1 }, "Arp Steps", 1, 16, 16));
+    ch (pid::arpOrder, "Arp Note Order", pid::arpOrders, 1);
+    fl (pid::arpVelAmt, "Arp Vel Amount", lin (0.0f, 1.0f), 1.0f);
+    fl (pid::arpSlide,  "Arp Slide",      lin (0.0f, 1.0f), 0.0f);
+    fl (pid::arpHuman,  "Arp Humanize",   lin (0.0f, 1.0f), 0.0f);
+    for (int i = 0; i < 16; ++i)
+    {
+        p.push_back (std::make_unique<AudioParameterBool>  (ParameterID { pid::arpStepOn (i), 1 },  "Arp Step " + String (i + 1) + " On", true));
+        p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::arpStepVel (i), 1 }, "Arp Step " + String (i + 1) + " Vel",
+                                                            NormalisableRange<float> (0.0f, 1.0f, 0.0f), 1.0f));
+    }
 
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { pid::mainVol, 1 }, "Main", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.8f));
 

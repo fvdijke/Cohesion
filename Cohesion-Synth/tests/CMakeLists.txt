@@ -18,3 +18,13 @@ juce_add_console_app(FxTest PRODUCT_NAME "FxTest")
 target_sources(FxTest PRIVATE FxTest.cpp)
 target_compile_definitions(FxTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(FxTest PRIVATE juce::juce_audio_basics PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(ArpTest PRODUCT_NAME "ArpTest")
+target_sources(ArpTest PRIVATE ArpTest.cpp)
+target_compile_definitions(ArpTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(ArpTest PRIVATE juce::juce_audio_basics PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(PresetTest PRODUCT_NAME "PresetTest")
+target_sources(PresetTest PRIVATE PresetTest.cpp)
+target_compile_definitions(PresetTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(PresetTest PRIVATE juce::juce_audio_processors PUBLIC juce::juce_recommended_config_flags)

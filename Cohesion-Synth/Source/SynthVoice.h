@@ -19,6 +19,7 @@ class SynthVoice : public juce::SynthesiserVoice
 {
 public:
     void setSnapshot (const syn::Snapshot* s) { snap = s; }
+    void setGlideSource (double* lastNoteHz)    { lastHz = lastNoteHz; }
 
     bool canPlaySound (juce::SynthesiserSound* s) override { return dynamic_cast<SynthSound*> (s) != nullptr; }
 
@@ -41,6 +42,16 @@ public:
         vel = 0.3f + 0.7f * velocity;
         velRaw = velocity;
         baseFreq = juce::MidiMessage::getMidiNoteInHertz (note);
+        glideOct = 0.0;
+        if (lastHz != nullptr)
+        {
+            if (snap->glideMs > 0.5f && *lastHz > 0.0)
+            {
+                glideOct = std::log2 (*lastHz / baseFreq);
+                gCoef = std::exp (-3.0 / (sr * (double) snap->glideMs * 0.001));
+            }
+            *lastHz = baseFreq;
+        }
         lad1L.reset(); lad1R.reset(); svf2L.reset(); svf2R.reset();
         for (int i = 0; i < 4; ++i)
             osc[i].startNote (oscFreq (i), sr, snap->osc[i], rng);
@@ -103,7 +114,8 @@ public:
                 if (ms.src > 0 && ms.dst > 0) d[ms.dst] += src[ms.src] * ms.amt;
             }
 
-            const double pMult = std::pow (2.0, (double) d[3] * 2.0);
+            const double pMult = std::pow (2.0, (double) d[3] * 2.0 + glideOct);
+            if (glideOct != 0.0) { glideOct *= gCoef; if (std::abs (glideOct) < 1.0e-5) glideOct = 0.0; }
 
             // --- oscillators ---
             float sumL = 0.0f, sumR = 0.0f, m2 = 0.0f;
@@ -188,6 +200,7 @@ private:
     double sr = 44100.0, baseFreq = 440.0;
     int midiNote = 69;
     float vel = 1.0f, velRaw = 1.0f, modWheel = 0.0f;
+    double* lastHz = nullptr; double glideOct = 0.0, gCoef = 1.0;
     long samplesSinceNote = 0;
     float baseLfoRate[4] { 2,2,2,2 }, fadeSamp[4] { 0,0,0,0 };
 

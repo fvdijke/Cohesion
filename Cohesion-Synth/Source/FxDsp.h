@@ -23,7 +23,7 @@ namespace fx
         bool  phOn   = false; float phRate = 0.4f, phDepth = 0.7f, phFb = 0.5f; int phStages = 1; float phSpread = 0.5f; int phSync = 0; float phMix = 0.5f;
         bool  ecOn   = false; float ecTime = 375;  int ecSync = 0; float ecFb = 0.4f, ecDamp = 0.3f, ecWidth = 0.7f; bool ecPing = false; float ecMix = 0.25f;
         bool  rvOn   = false; float rvSize = 0.6f, rvDecay = 0.5f, rvPre = 20, rvDamp = 0.4f, rvWidth = 1.0f, rvLowCut = 120, rvMix = 0.25f;
-        bool  limOn  = true;  float limCeil = -0.3f;
+        bool  limOn  = true;  float limCeil = -0.3f, limRel = 80.0f, limDrive = 0.0f;
         double bpm = 120.0;
     };
 
@@ -333,13 +333,15 @@ namespace fx
     // ======================================================================
     struct Limiter
     {
-        int la = 64; std::vector<float> bL, bR, req; int w = 0, rw = 0; float gSm = 1.0f, attC = 0.1f, relC = 0.001f;
-        void prepare (double sr)
+        int la = 64; std::vector<float> bL, bR, req; int w = 0, rw = 0; float gSm = 1.0f, attC = 0.1f;
+        double sr = 44100.0;
+        std::atomic<float> grDb { 0.0f }, outPk { 0.0f };
+        void prepare (double s)
         {
+            sr = s;
             la = juce::jmax (8, (int) (sr * 0.0015));
             bL.assign ((size_t) la, 0.0f); bR.assign ((size_t) la, 0.0f); req.assign ((size_t) la + 1, 1.0f);
             attC = 1.0f - std::exp (-4.6f / (float) la);
-            relC = 1.0f - std::exp (-1.0f / (float) (sr * 0.08));
             reset();
         }
         void reset() { std::fill (bL.begin(), bL.end(), 0.0f); std::fill (bR.begin(), bR.end(), 0.0f); std::fill (req.begin(), req.end(), 1.0f); w = rw = 0; gSm = 1.0f; }
@@ -347,10 +349,13 @@ namespace fx
 
         void process (float* L, float* R, int n, const FxParams& p)
         {
-            const float ceil = juce::Decibels::decibelsToGain (juce::jlimit (-24.0f, 0.0f, p.limCeil));
+            const float ceil  = juce::Decibels::decibelsToGain (juce::jlimit (-24.0f, 0.0f, p.limCeil));
+            const float drive = p.limOn ? juce::Decibels::decibelsToGain (juce::jlimit (0.0f, 24.0f, p.limDrive)) : 1.0f;
+            const float relC  = 1.0f - std::exp (-1.0f / (float) (sr * juce::jlimit (5.0f, 2000.0f, p.limRel) * 0.001));
+            float minG = 1.0f, pkOut = 0.0f;
             for (int i = 0; i < n; ++i)
             {
-                const float inL = L[i], inR = R[i];
+                const float inL = L[i] * drive, inR = R[i] * drive;
                 const float pk = juce::jmax (std::abs (inL), std::abs (inR));
                 req[(size_t) rw] = (p.limOn && pk > ceil) ? ceil / pk : 1.0f;
                 if (++rw > la) rw = 0;
@@ -366,7 +371,11 @@ namespace fx
                     R[i] = juce::jlimit (-ceil, ceil, oR * gSm);
                 }
                 else { L[i] = oL; R[i] = oR; }
+                minG  = juce::jmin (minG, p.limOn ? gSm : 1.0f);
+                pkOut = juce::jmax (pkOut, std::abs (L[i]), std::abs (R[i]));
             }
+            grDb.store (-juce::Decibels::gainToDecibels (minG, -60.0f));
+            outPk.store (pkOut);
         }
     };
 

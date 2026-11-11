@@ -10,6 +10,7 @@ CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
     {
         auto* v = new SynthVoice();
         v->setSnapshot (&snapshot);
+        v->setGlideSource (&lastNoteHz);
         synth.addVoice (v);
     }
     presets = cohesionSynthPresets();
@@ -57,6 +58,19 @@ void CohesionSynthAudioProcessor::syncFxOrderFromState()
     for (int k = 0; k < fx::kNumFx; ++k) fxOrder[k].store (o[k]);
 }
 
+void CohesionSynthAudioProcessor::updateArpParams()
+{
+    auto f  = [this] (const juce::String& id) { return apvts.getRawParameterValue (id)->load(); };
+    auto ip = [this] (const juce::String& id) { return (int) apvts.getRawParameterValue (id)->load(); };
+    auto bp = [this] (const juce::String& id) { return apvts.getRawParameterValue (id)->load() > 0.5f; };
+    arpp.on = bp (pid::arpOn); arpp.mode = ip (pid::arpMode); arpp.rate = ip (pid::arpRate); arpp.octaves = ip (pid::arpOct);
+    arpp.gate = f (pid::arpGate); arpp.swing = f (pid::arpSwing); arpp.random = f (pid::arpRandom);
+    arpp.sync = bp (pid::arpSync); arpp.hold = bp (pid::arpHold); arpp.latch = bp (pid::arpLatch);
+    arpp.tempo = f (pid::arpTempo); arpp.steps = ip (pid::arpSteps); arpp.order = ip (pid::arpOrder);
+    arpp.velAmt = f (pid::arpVelAmt); arpp.slide = f (pid::arpSlide); arpp.humanize = f (pid::arpHuman);
+    for (int i = 0; i < arp::kSteps; ++i) { arpp.stepOn[i] = bp (pid::arpStepOn (i)); arpp.stepVel[i] = f (pid::arpStepVel (i)); }
+}
+
 void CohesionSynthAudioProcessor::updateFxParams()
 {
     auto f  = [this] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
@@ -73,13 +87,13 @@ void CohesionSynthAudioProcessor::updateFxParams()
     fxp.ecDamp = f (pid::ecDamp); fxp.ecWidth = f (pid::ecWidth); fxp.ecPing = bp (pid::ecPing); fxp.ecMix = f (pid::ecMix);
     fxp.rvOn = bp (pid::rvOn); fxp.rvSize = f (pid::rvSize); fxp.rvDecay = f (pid::rvDecay); fxp.rvPre = f (pid::rvPre);
     fxp.rvDamp = f (pid::rvDamp); fxp.rvWidth = f (pid::rvWidth); fxp.rvLowCut = f (pid::rvLowCut); fxp.rvMix = f (pid::rvMix);
-    fxp.limOn = bp (pid::limOn); fxp.limCeil = f (pid::limCeil);
+    fxp.limOn = bp (pid::limOn); fxp.limCeil = f (pid::limCeil); fxp.limRel = f (pid::limRel); fxp.limDrive = f (pid::limDrive);
 }
 
 juce::String CohesionSynthAudioProcessor::presetDisplayName (int i) const
 {
     if (i < 0 || i >= (int) presets.size()) return {};
-    return presets[(size_t) i].category + "  —  " + presets[(size_t) i].name;
+    return presets[(size_t) i].category + juce::String::fromUTF8 ("  \xe2\x80\x94  ") + presets[(size_t) i].name;
 }
 
 void CohesionSynthAudioProcessor::loadPreset (int i)
@@ -97,6 +111,7 @@ void CohesionSynthAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     fxChain.prepare (sampleRate, samplesPerBlock);
     monoScratch.setSize (1, juce::jmax (64, samplesPerBlock));
     setLatencySamples (fxChain.lim.latency());
+    arpEngine.prepare (sampleRate);
 }
 
 bool CohesionSynthAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -190,22 +205,33 @@ void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
+    const int n = buffer.getNumSamples();
 
     for (const auto meta : midi)
         if (meta.getMessage().isNoteOn()) { midiActivity.store (1); break; }
 
+    // --- host transport ---
+    bool playing = false;
+    std::optional<double> ppq;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+        {
+            if (auto bpm = pos->getBpm()) if (*bpm > 20.0 && *bpm < 400.0) fxp.bpm = *bpm;
+            playing = pos->getIsPlaying();
+            if (auto q = pos->getPpqPosition()) ppq = *q;
+        }
+    fxBpm.store (fxp.bpm);
+
+    // --- arpeggiator (rewrites the note events) ---
+    updateArpParams();
+    arpEngine.process (midi, n, arpp, fxp.bpm, playing, ppq);
+
     updateSnapshot();
-    const int n = buffer.getNumSamples();
+    snapshot.glideMs = arpp.on ? arpp.slide * 300.0f : 0.0f;
     synth.renderNextBlock (buffer, midi, 0, n);
 
     // --- FX chain (in the user's order) -> MAIN -> limiter ---
     updateFxParams();
-    if (auto* ph = getPlayHead())
-        if (auto pos = ph->getPosition())
-            if (auto bpm = pos->getBpm())
-                if (*bpm > 20.0 && *bpm < 400.0) fxp.bpm = *bpm;
-    fxBpm.store (fxp.bpm);
-
     int order[fx::kNumFx];
     for (int k = 0; k < fx::kNumFx; ++k) order[k] = fxOrder[k].load();
 

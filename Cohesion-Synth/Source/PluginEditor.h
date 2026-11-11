@@ -249,6 +249,8 @@ struct MidiLed : juce::Component
 
 #include "FilterModTab.h"
 #include "FxTab.h"
+#include "LibraryOverlay.h"
+#include "ArpTab.h"
 
 // ===========================================================================
 class CohesionSynthAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -280,11 +282,12 @@ private:
 
     std::unique_ptr<FilterModTab>     filterTab;
     std::unique_ptr<FxTab>            fxTab;
-    std::unique_ptr<PlaceholderPanel> arpTab;
+    std::unique_ptr<ArpTab>           arpTab;
 
     MidiLed midiLed;
     std::unique_ptr<LabeledKnob> mainKnob;
-    juce::TextButton presetPrev { "<" }, presetNext { ">" };
+    juce::TextButton presetPrev { "<" }, presetNext { ">" }, libraryBtn { "LIBRARY" };
+    std::unique_ptr<LibraryOverlay> library;
     juce::Label presetName;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CohesionSynthAudioProcessorEditor)

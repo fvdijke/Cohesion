@@ -330,9 +330,9 @@ struct FilterModTab : juce::Component
 
     explicit FilterModTab (juce::AudioProcessorValueTreeState& apvts)
     {
-        f1 = std::make_unique<FilterPanel> (apvts, "FILTER 1  ·  LADDER", juce::StringArray { "LP 24", "LP 12", "HP 24" },
+        f1 = std::make_unique<FilterPanel> (apvts, juce::String::fromUTF8 ("FILTER 1  \xc2\xb7  LADDER"), juce::StringArray { "LP 24", "LP 12", "HP 24" },
                                             pid::fltType, pid::fltCutoff, pid::fltRes, pid::fltDrive, pid::fltKeyTrk, pid::fltEnvAmt, pid::flt1EnvSrc, juce::String());
-        f2 = std::make_unique<FilterPanel> (apvts, "FILTER 2  ·  SVF", juce::StringArray { "LP", "HP", "BP", "Notch" },
+        f2 = std::make_unique<FilterPanel> (apvts, juce::String::fromUTF8 ("FILTER 2  \xc2\xb7  SVF"), juce::StringArray { "LP", "HP", "BP", "Notch" },
                                             pid::flt2Type, pid::flt2Cutoff, pid::flt2Res, pid::flt2Drive, pid::flt2KeyTrk, pid::flt2EnvAmt, pid::flt2EnvSrc, pid::flt2Slope);
         routing = std::make_unique<RoutingPanel> (apvts);
         envs    = std::make_unique<EnvPanel> (apvts);

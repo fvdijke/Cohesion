@@ -31,7 +31,7 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
 
     // --- placeholder tabs ---
     fxTab     = std::make_unique<FxTab> (proc);
-    arpTab    = std::make_unique<PlaceholderPanel> ("ARP  —  coming soon");
+    arpTab    = std::make_unique<ArpTab> (proc);
     addChildComponent (*fxTab);
     addChildComponent (*arpTab);
 
@@ -59,6 +59,13 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     presetNext.onClick = [this] { proc.loadPreset (proc.currentPresetIndex() + 1); updatePresetName(); };
     addAndMakeVisible (presetPrev);
     addAndMakeVisible (presetNext);
+    libraryBtn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0f6e56));
+    libraryBtn.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffeafff6));
+    libraryBtn.onClick = [this] { library->open(); };
+    addAndMakeVisible (libraryBtn);
+    library = std::make_unique<LibraryOverlay> (proc);
+    library->onPresetLoaded = [this] { updatePresetName(); };
+    addChildComponent (*library);
     updatePresetName();
 
     showTab (0);
@@ -117,6 +124,8 @@ void CohesionSynthAudioProcessorEditor::resized()
     presetPrev.setBounds (pb.removeFromLeft (28));
     presetNext.setBounds (pb.removeFromRight (28));
     presetName.setBounds (pb.reduced (6, 0));
+    libraryBtn.setBounds (getWidth() / 2 + 178, 26, 78, 30);
+    library->setBounds (getLocalBounds());
 
     // tabs
     auto tabRow = r.removeFromTop (44).reduced (0, 6);

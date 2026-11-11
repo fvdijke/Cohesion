@@ -8,11 +8,12 @@
 
 namespace fxui
 {
-    static const char* names[fx::kNumFx] = { "COMP", "FLANGER", "PHASER", "ECHO", "REVERB" };
+    static constexpr int kLimiter = fx::kNumFx;   // fixed panel at the end of the chain
+    static const char* names[fx::kNumFx + 1] = { "COMP", "FLANGER", "PHASER", "ECHO", "REVERB", "LIMITER" };
     inline const char* onId (int fxId)
     {
         switch (fxId) { case fx::kComp: return pid::compOn; case fx::kFlanger: return pid::flOn; case fx::kPhaser: return pid::phOn;
-                        case fx::kEcho: return pid::ecOn; default: return pid::rvOn; }
+                        case fx::kEcho: return pid::ecOn; case fx::kReverb: return pid::rvOn; default: return pid::limOn; }
     }
     inline bool isOn (juce::AudioProcessorValueTreeState& apvts, int fxId)
     {
@@ -52,8 +53,9 @@ struct FxPanel : juce::Component
                                       { pid::phStages, "STAGES" }, { pid::phSpread, "SPREAD" }, { pid::phSync, "SYNC" }, { pid::phMix, "MIX" } }; break;
             case fx::kEcho:    ks = { { pid::ecTime, "TIME" }, { pid::ecSync, "SYNC" }, { pid::ecFb, "FEEDBK" },
                                       { pid::ecDamp, "DAMP" }, { pid::ecWidth, "WIDTH" }, { pid::ecPing, "PINGPONG" }, { pid::ecMix, "MIX" } }; break;
-            default:           ks = { { pid::rvSize, "SIZE" }, { pid::rvDecay, "DECAY" }, { pid::rvPre, "PREDLY" },
+            case fx::kReverb:  ks = { { pid::rvSize, "SIZE" }, { pid::rvDecay, "DECAY" }, { pid::rvPre, "PREDLY" },
                                       { pid::rvDamp, "DAMP" }, { pid::rvWidth, "WIDTH" }, { pid::rvLowCut, "LOW CUT" }, { pid::rvMix, "MIX" } }; break;
+            default:           ks = { { pid::limDrive, "DRIVE" }, { pid::limCeil, "CEILING" }, { pid::limRel, "RELEASE" } }; break;
         }
         for (auto& k : ks) { auto* kn = new LabeledKnob (apvts, k.id, k.name); knobs.add (kn); addAndMakeVisible (kn); }
     }
@@ -70,6 +72,8 @@ struct FxPanel : juce::Component
         if (fxId == fx::kPhaser)  hz = fx::modSyncHz ((int) v (pid::phSync), v (pid::phRate), bpm);
         anim += hz / 30.0;
         if (anim > 1000.0) anim -= 1000.0;
+        const float want = fxui::isOn (apvts, fxId) ? 1.0f : 0.38f;   // dim the controls of a bypassed effect
+        for (auto* k : knobs) if (std::abs (k->getAlpha() - want) > 0.01f) k->setAlpha (want);
         repaint (displayArea().toNearestInt().expanded (2));
     }
 
@@ -96,7 +100,8 @@ struct FxPanel : juce::Component
             case fx::kFlanger: drawFlanger (g, d, a); break;
             case fx::kPhaser:  drawPhaser (g, d, a);  break;
             case fx::kEcho:    drawEcho (g, d, a);    break;
-            default:           drawReverb (g, d, a);  break;
+            case fx::kReverb:  drawReverb (g, d, a);  break;
+            default:           drawLimiter (g, d, a); break;
         }
         g.restoreState();
     }
@@ -198,6 +203,28 @@ struct FxPanel : juce::Component
         g.drawText (juce::String (rt, 1) + " s", d.reduced (8, 4), juce::Justification::topRight);
     }
 
+    void drawLimiter (juce::Graphics& g, juce::Rectangle<float> d, float a)
+    {
+        const float gr  = juce::jlimit (0.0f, 12.0f, proc.getLimiterGainReductionDb());
+        const float pkDb = juce::Decibels::gainToDecibels (proc.getOutputPeak(), -36.0f);
+        const float ceil = v (pid::limCeil);
+        auto lab = [&] (float y, const char* t)
+        {
+            g.setColour (juce::Colour (0xff6c7a74)); g.setFont (juce::Font ("Segoe UI", 8.0f, juce::Font::plain));
+            g.drawText (t, (int) d.getX() + 8, (int) y - 1, 26, 12, juce::Justification::centredLeft);
+        };
+        juce::Rectangle<float> t1 (d.getX() + 36, d.getY() + 14, d.getWidth() - 46, 10), t2 = t1.translated (0, 22);
+        lab (t1.getY(), "GR"); lab (t2.getY(), "OUT");
+        g.setColour (juce::Colour (0xff13181d)); g.fillRoundedRectangle (t1, 5.0f); g.fillRoundedRectangle (t2, 5.0f);
+        g.setColour (fxui::teal.withAlpha (a)); g.fillRoundedRectangle (t1.withWidth (juce::jmax (10.0f, t1.getWidth() * gr / 12.0f)), 5.0f);
+        const float outFrac = juce::jlimit (0.0f, 1.0f, (pkDb + 36.0f) / 36.0f);
+        g.setColour (juce::Colour (0xff5dcaa5).withAlpha (0.7f * a)); g.fillRoundedRectangle (t2.withWidth (juce::jmax (10.0f, t2.getWidth() * outFrac)), 5.0f);
+        const float cx = t2.getX() + t2.getWidth() * juce::jlimit (0.0f, 1.0f, (ceil + 36.0f) / 36.0f);
+        g.setColour (juce::Colour (0xffeafff6).withAlpha (a)); g.fillRect (cx - 1.0f, t2.getY() - 3, 2.0f, t2.getHeight() + 6);
+        g.setColour (juce::Colour (0xff9fe1cb).withAlpha (a)); g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
+        g.drawText ("-" + juce::String (gr, 1) + " dB", d.reduced (8, 3), juce::Justification::topRight);
+    }
+
     void resized() override
     {
         onBtn.setBounds (getWidth() - 14 - 46, 13, 46, 22);
@@ -205,6 +232,13 @@ struct FxPanel : juce::Component
         r.removeFromTop (108);
         const int rowH = juce::jmin (96, r.getHeight() / 4);
         const int cw = r.getWidth() / 2;
+        if (knobs.size() == 3)
+        {
+            knobs[0]->setBounds (r.getX(), r.getY(), cw, rowH);
+            knobs[1]->setBounds (r.getX() + cw, r.getY(), cw, rowH);
+            knobs[2]->setBounds (r.getX() + cw / 2, r.getY() + rowH, cw, rowH);
+            return;
+        }
         for (int i = 0; i < 6 && i < knobs.size(); ++i)
             knobs[i]->setBounds (r.getX() + (i % 2) * cw, r.getY() + (i / 2) * rowH, cw, rowH);
         if (knobs.size() > 6)
@@ -214,7 +248,7 @@ struct FxPanel : juce::Component
 
 // ---------------------------------------------------------------------------
 //  Signal-chain bar: drag chips to reorder, click a chip to toggle the effect.
-//  Master limiter on the right.
+//  The LIMITER chip is fixed at the end (click toggles it).
 // ---------------------------------------------------------------------------
 struct FxChainBar : juce::Component
 {
@@ -222,29 +256,13 @@ struct FxChainBar : juce::Component
     juce::AudioProcessorValueTreeState& apvts;
     std::function<void()> onOrderChanged;
 
-    juce::ToggleButton limBtn;
-    juce::Slider ceilSl;
-    std::unique_ptr<ButtonAtt> limAtt;
-    std::unique_ptr<SliderAtt> ceilAtt;
-
-    int downSlot = -1, insertAt = -1; bool dragging = false; float dragX = 0, downX = 0;
+    int downSlot = -1, insertAt = -1; bool dragging = false, downOnLimiter = false; float dragX = 0, downX = 0;
     static constexpr int x0 = 124, chipW = 116, arrowW = 22;
 
-    explicit FxChainBar (CohesionSynthAudioProcessor& p) : proc (p), apvts (p.apvts)
-    {
-        limBtn.setButtonText ("LIMITER"); addAndMakeVisible (limBtn);
-        limAtt = std::make_unique<ButtonAtt> (apvts, pid::limOn, limBtn);
-        ceilSl.setSliderStyle (juce::Slider::LinearHorizontal);
-        ceilSl.setTextBoxStyle (juce::Slider::TextBoxRight, false, 44, 18);
-        ceilSl.setColour (juce::Slider::trackColourId, fxui::teal.withAlpha (0.8f));
-        ceilSl.setColour (juce::Slider::backgroundColourId, juce::Colour (0xff13181d));
-        ceilSl.setColour (juce::Slider::thumbColourId, juce::Colour (0xffdfe6e2));
-        ceilSl.setTooltip ("Limiter ceiling (dBFS)");
-        addAndMakeVisible (ceilSl);
-        ceilAtt = std::make_unique<SliderAtt> (apvts, pid::limCeil, ceilSl);
-    }
+    explicit FxChainBar (CohesionSynthAudioProcessor& p) : proc (p), apvts (p.apvts) {}
 
     juce::Rectangle<int> slotRect (int k) const { return { x0 + k * (chipW + arrowW), 8, chipW, getHeight() - 16 }; }
+    juce::Rectangle<int> limiterRect() const    { return slotRect (fx::kNumFx).translated (6, 0); }
 
     int slotAt (juce::Point<int> p) const
     {
@@ -263,7 +281,7 @@ struct FxChainBar : juce::Component
             out[k] = (k == insertAt) ? cur[downSlot] : tmp[o++];
     }
 
-    void drawChip (juce::Graphics& g, juce::Rectangle<float> r, int fxId, float alpha)
+    void drawChip (juce::Graphics& g, juce::Rectangle<float> r, int fxId, float alpha, bool grip = true)
     {
         const bool on = fxui::isOn (apvts, fxId);
         g.setColour ((on ? fxui::chipBg : juce::Colour (0xff0e1013)).withAlpha (alpha)); g.fillRoundedRectangle (r, 5.0f);
@@ -273,6 +291,7 @@ struct FxChainBar : juce::Component
         g.setColour ((on ? juce::Colour (0xffeafff6) : fxui::txt).withAlpha (alpha));
         g.setFont (juce::Font ("Segoe UI", 10.0f, juce::Font::plain));
         g.drawText (fxui::names[fxId], r.withTrimmedLeft (22).withTrimmedRight (18), juce::Justification::centred);
+        if (! grip) return;
         g.setColour (juce::Colour (0xff3a4149).withAlpha (alpha));
         for (int i = 0; i < 3; ++i) for (int j = 0; j < 2; ++j)   // grip dots
             g.fillEllipse (r.getRight() - 14 + j * 4, r.getCentreY() - 5 + i * 4, 2, 2);
@@ -288,21 +307,24 @@ struct FxChainBar : juce::Component
         g.drawText ("SIGNAL CHAIN", 16, 0, 110, getHeight(), juce::Justification::centredLeft);
 
         int order[fx::kNumFx]; previewOrder (order);
-        g.setColour (juce::Colour (0xff6c7a74)); g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain));
+        const auto arrow = juce::String::fromUTF8 ("\xe2\x86\x92");
+        g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain));
         for (int k = 0; k < fx::kNumFx; ++k)
         {
             auto r = slotRect (k).toFloat();
-            if (k < fx::kNumFx - 1)
-                g.drawText (juce::String::fromUTF8 ("\xe2\x86\x92"), (int) r.getRight(), (int) r.getY(), arrowW, (int) r.getHeight(), juce::Justification::centred);
+            g.setColour (juce::Colour (0xff6c7a74));
+            g.drawText (arrow, (int) r.getRight(), (int) r.getY(), arrowW, (int) r.getHeight(), juce::Justification::centred);
             if (dragging && k == insertAt)
             {
                 g.setColour (fxui::teal.withAlpha (0.25f)); g.drawRoundedRectangle (r, 5.0f, 1.5f);
-                g.setColour (juce::Colour (0xff6c7a74));
                 continue;   // the dragged chip floats under the mouse
             }
             drawChip (g, r, order[k], 1.0f);
-            g.setColour (juce::Colour (0xff6c7a74));
         }
+        // fixed limiter at the end
+        auto lr = limiterRect().toFloat();
+        drawChip (g, lr, fxui::kLimiter, 1.0f, false);
+
         if (dragging && downSlot >= 0)
         {
             int cur[fx::kNumFx]; proc.getFxOrder (cur);
@@ -313,7 +335,9 @@ struct FxChainBar : juce::Component
 
     void mouseDown (const juce::MouseEvent& e) override
     {
-        downSlot = slotAt (e.getPosition()); dragging = false; downX = dragX = (float) e.x; insertAt = downSlot;
+        downOnLimiter = limiterRect().contains (e.getPosition());
+        downSlot = downOnLimiter ? -1 : slotAt (e.getPosition());
+        dragging = false; downX = dragX = (float) e.x; insertAt = downSlot;
     }
 
     void mouseDrag (const juce::MouseEvent& e) override
@@ -329,9 +353,17 @@ struct FxChainBar : juce::Component
         }
     }
 
-    void mouseUp (const juce::MouseEvent&) override
+    static void toggle (juce::AudioProcessorValueTreeState& apvts, int fxId)
     {
-        if (downSlot >= 0)
+        if (auto* prm = apvts.getParameter (fxui::onId (fxId)))
+            prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
+    }
+
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (downOnLimiter && limiterRect().contains (e.getPosition()))
+            toggle (apvts, fxui::kLimiter);
+        else if (downSlot >= 0)
         {
             int cur[fx::kNumFx]; proc.getFxOrder (cur);
             if (dragging)
@@ -340,40 +372,31 @@ struct FxChainBar : juce::Component
                 proc.setFxOrder (out);
                 if (onOrderChanged) onOrderChanged();
             }
-            else if (auto* prm = apvts.getParameter (fxui::onId (cur[downSlot])))   // click = toggle
-                prm->setValueNotifyingHost (prm->getValue() > 0.5f ? 0.0f : 1.0f);
+            else toggle (apvts, cur[downSlot]);   // click = toggle
         }
-        downSlot = insertAt = -1; dragging = false;
+        downSlot = insertAt = -1; dragging = downOnLimiter = false;
         setMouseCursor (juce::MouseCursor::NormalCursor);
         repaint();
-    }
-
-    void resized() override
-    {
-        const int lx = x0 + fx::kNumFx * (chipW + arrowW) - arrowW + 16;
-        limBtn.setBounds (lx, 10, 84, getHeight() - 20);
-        ceilSl.setBounds (lx + 92, 10, getWidth() - lx - 92 - 12, getHeight() - 20);
     }
 };
 
 // ---------------------------------------------------------------------------
-//  The whole FX tab.
+//  The whole FX tab: chain bar + five movable panels + fixed limiter panel.
 // ---------------------------------------------------------------------------
 struct FxTab : juce::Component, private juce::Timer
 {
     CohesionSynthAudioProcessor& proc;
     FxChainBar bar;
-    std::unique_ptr<FxPanel> panels[fx::kNumFx];
+    std::unique_ptr<FxPanel> panels[fx::kNumFx + 1];   // last = limiter
+    int lastOrder[fx::kNumFx] { 0, 1, 2, 3, 4 };
 
     explicit FxTab (CohesionSynthAudioProcessor& p) : proc (p), bar (p)
     {
         addAndMakeVisible (bar);
-        for (int i = 0; i < fx::kNumFx; ++i) { panels[i] = std::make_unique<FxPanel> (p, i); addAndMakeVisible (*panels[i]); }
+        for (int i = 0; i <= fx::kNumFx; ++i) { panels[i] = std::make_unique<FxPanel> (p, i); addAndMakeVisible (*panels[i]); }
         bar.onOrderChanged = [this] { resized(); };
         startTimerHz (30);
     }
-
-    int lastOrder[fx::kNumFx] { 0, 1, 2, 3, 4 };
 
     void resized() override
     {
@@ -382,17 +405,18 @@ struct FxTab : juce::Component, private juce::Timer
         r.removeFromTop (10);
         int order[fx::kNumFx]; proc.getFxOrder (order);
         std::copy (order, order + fx::kNumFx, lastOrder);
-        const int gap = 10;
-        const int pw = (r.getWidth() - gap * (fx::kNumFx - 1)) / fx::kNumFx;
+        const int gap = 8, n = fx::kNumFx + 1;
+        const int pw = (r.getWidth() - gap * (n - 1)) / n;
         for (int k = 0; k < fx::kNumFx; ++k)
             panels[order[k]]->setBounds (r.getX() + k * (pw + gap), r.getY(), pw, r.getHeight());
+        const int lx = r.getX() + fx::kNumFx * (pw + gap);
+        panels[fx::kNumFx]->setBounds (lx, r.getY(), r.getRight() - lx, r.getHeight());
     }
 
     void timerCallback() override
     {
         if (! isShowing()) return;
-        // keep the panel layout in sync if the order changed elsewhere (state recall)
-        int order[fx::kNumFx]; proc.getFxOrder (order);
+        int order[fx::kNumFx]; proc.getFxOrder (order);   // order may change on state recall
         if (! std::equal (order, order + fx::kNumFx, lastOrder)) resized();
         for (auto& pnl : panels) pnl->tick (proc.getFxBpm());
         bar.repaint();

@@ -38,7 +38,7 @@ namespace syn
 
         int   fltType = 0;    float fltCutoff = 12000, fltRes = 0.1f, fltDrive = 0, fltKeyTrk = 0, fltEnvAmt = 0;
         int   flt1EnvSrc = 1;
-        int   flt2Type = 0;   float flt2Cutoff = 8000, flt2Res = 0.1f, flt2Drive = 0, flt2KeyTrk = 0, flt2EnvAmt = 0;
+        int   flt2Type = 0;   float flt2Cutoff = 20000, flt2Res = 0.1f, flt2Drive = 0, flt2KeyTrk = 0, flt2EnvAmt = 0;
         int   flt2Slope = 1,  flt2EnvSrc = 1;
         int   routing = 0;    float routeBalance = 0.5f;  // 0 = F1 only ... 1 = F2 only (parallel)
 
@@ -46,6 +46,7 @@ namespace syn
         LfoP  lfo[4];
         ModSlot mod[kNumMod];
         float mainVol = 0.8f;
+        float glideMs = 0.0f;   // portamento (arp SLIDE)
     };
 
     inline float polyBlep (double t, double dt)
