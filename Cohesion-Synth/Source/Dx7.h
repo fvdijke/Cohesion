@@ -133,6 +133,57 @@ namespace dx7
         return pt;
     }
 
+    // inverse of fromVmem: pack one voice into its 128-byte VMEM image (OP6 first)
+    inline std::array<uint8_t, 128> toVmem (const Patch& pt)
+    {
+        std::array<uint8_t, 128> v {};
+        for (int k = 0; k < 6; ++k)
+        {
+            const auto& o = pt.op[(size_t) (5 - k)];
+            uint8_t* p = v.data() + k * 17;
+            for (int i = 0; i < 4; ++i) { p[i] = clampU (o.r[i], 99); p[4 + i] = clampU (o.l[i], 99); }
+            p[8] = clampU (o.bp, 99); p[9] = clampU (o.ld, 99); p[10] = clampU (o.rd, 99);
+            p[11] = (uint8_t) ((o.lc & 3) | ((o.rc & 3) << 2));
+            p[12] = (uint8_t) ((o.rs & 7) | (clampU (o.det, 14) << 3));
+            p[13] = (uint8_t) ((o.ams & 3) | ((o.kvs & 7) << 2));
+            p[14] = clampU (o.ol, 99);
+            p[15] = (uint8_t) ((o.mode & 1) | ((o.coarse & 31) << 1));
+            p[16] = clampU (o.fine, 99);
+        }
+        for (int i = 0; i < 4; ++i) { v[102 + (size_t) i] = clampU (pt.pr[i], 99); v[106 + (size_t) i] = clampU (pt.pl[i], 99); }
+        v[110] = (uint8_t) (pt.alg & 31);
+        v[111] = (uint8_t) ((pt.fb & 7) | ((pt.oks & 1) << 3));
+        v[112] = clampU (pt.lfoSpeed, 99); v[113] = clampU (pt.lfoDelay, 99);
+        v[114] = clampU (pt.lfoPmd, 99);   v[115] = clampU (pt.lfoAmd, 99);
+        v[116] = (uint8_t) ((pt.lfoSync & 1) | (clampU (pt.lfoWave, 5) << 1) | ((pt.pms & 7) << 4));
+        v[117] = clampU (pt.transpose, 48);
+        for (int i = 0; i < 10; ++i)
+        {
+            const char c = pt.name[i];
+            v[118 + (size_t) i] = (uint8_t) ((c >= 32 && c < 127) ? c : ' ');
+        }
+        return v;
+    }
+
+    // Complete 32-voice bulk dump: F0 43 0n 09 20 00 <4096 bytes> <checksum> F7 (4104 bytes).
+    // Fewer than 32 voices are padded with INIT VOICE.
+    inline std::vector<uint8_t> writeBank (const std::vector<Patch>& voices, int midiChannel = 0)
+    {
+        std::vector<uint8_t> out;
+        out.reserve (4104);
+        for (uint8_t b : { (uint8_t) 0xF0, (uint8_t) 0x43, (uint8_t) (midiChannel & 15), (uint8_t) 0x09, (uint8_t) 0x20, (uint8_t) 0x00 }) out.push_back (b);
+        const Patch blank = initVoice();
+        int sum = 0;
+        for (size_t v = 0; v < 32; ++v)
+            for (uint8_t b : toVmem (v < voices.size() ? voices[v] : blank)) { out.push_back (b); sum += b; }
+        out.push_back ((uint8_t) ((-sum) & 0x7f));
+        out.push_back (0xF7);
+        return out;
+    }
+
+    // field-by-field equality (what survives a VMEM round trip)
+    inline bool sameVoice (const Patch& a, const Patch& b) { return toVmem (a) == toVmem (b); }
+
     struct ParseResult { std::vector<Patch> voices; int banks = 0, singles = 0, badChecksums = 0; };
 
     // Accepts SysEx files with one or more messages, or a raw 4096-byte VMEM dump.
@@ -149,7 +200,9 @@ namespace dx7
             const uint8_t fmt = b[i + 3];
             const size_t len = ((size_t) b[i + 4] << 7) | b[i + 5];
             if ((b[i + 2] & 0xF0) != 0x00) continue;
-            if (fmt == 9 && len == 4096 && i + 6 + 4096 < size)
+            // some editors write the byte count as 10 00 (0x1000 in 8-bit form); accept it when the message is complete
+            const bool bankLen = len == 4096 || (b[i + 4] == 0x10 && b[i + 5] == 0x00 && i + 6 + 4097 < size && b[i + 6 + 4097] == 0xF7);
+            if (fmt == 9 && bankLen && i + 6 + 4096 < size)
             {
                 const uint8_t* d = b + i + 6;
                 if (checksum (d, 4096) != (b[i + 6 + 4096] & 0x7f)) ++res.badChecksums;
@@ -168,6 +221,16 @@ namespace dx7
         {
             for (int v = 0; v < 32; ++v) res.voices.push_back (fromVmem (b + v * 128));
             ++res.banks;
+        }
+        else if (! foundFramed && size == 32 * 155)      // 32 unframed VCED voices
+        {
+            bool plausible = true;
+            for (size_t k = 0; k < size && plausible; ++k) plausible = b[k] < 0x80;
+            if (plausible)
+            {
+                for (int v = 0; v < 32; ++v) res.voices.push_back (fromVced (b + v * 155));
+                res.singles += 32;
+            }
         }
         return res;
     }

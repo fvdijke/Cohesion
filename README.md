@@ -50,6 +50,7 @@ COHESION/
 ├─ Cohesion-ADT/       # COHESION - ADT       (VST3 "Cohesion ADT")
 ├─ Cohesion-Transient/ # COHESION - TRANSIENT (VST3 "Cohesion Transient")
 ├─ Cohesion-Synth/     # COHESION - SYNTH     (design mockups only, not yet built)
+├─ Cohesion-SysEx/     # COHESION - SYSEX     (standalone DX7 bank builder, see its README)
 └─ installer/         # Inno Setup script for the combined Windows installer
 ```
 
