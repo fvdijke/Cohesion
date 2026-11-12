@@ -99,9 +99,89 @@ static void snapshot (LaModuleProcessor& p, const juce::File& outDir, const char
     std::printf ("wrote %s\n", f.getFullPathName().toRawUTF8());
 }
 
+// ---------------------------------------------------------------------------
+//  ModuleTest --export <source folder> <target folder>
+//  Finds every control + PCM ROM pair under <source> (files and .zip, recursively) that Munt
+//  plays and copies each working set to <target>/<model version>/<MODEL>_CONTROL.ROM + _PCM.ROM.
+//  Every distinct control ROM gets its own set. Source files are only read.
+// ---------------------------------------------------------------------------
+static int exportWorkingSets (const juce::File& src, const juce::File& dst)
+{
+    struct Blob { juce::String name, container; juce::MemoryBlock data; uint64_t hash = 0; };
+    std::vector<Blob> controls, pcms;
+    auto hashOf = [] (const juce::MemoryBlock& m) { return la32::fnv1a (static_cast<const uint8_t*> (m.getData()), m.getSize()); };
+    auto add = [&] (const juce::String& name, const juce::String& container, juce::MemoryBlock mb)
+    {
+        const auto n = mb.getSize();
+        auto& list = (n == 65536 || n == 131072) ? controls : pcms;
+        if (! (n == 65536 || n == 131072 || n == 524288 || n == 1048576)) return;
+        Blob b { name, container, std::move (mb), 0 }; b.hash = hashOf (b.data);
+        for (auto& e : list) if (e.hash == b.hash) return;          // identical file seen before
+        list.push_back (std::move (b));
+    };
+    int files = 0;
+    for (auto& f : src.findChildFiles (juce::File::findFiles, true, "*"))
+    {
+        if (f.isAChildOf (dst)) continue;
+        ++files;
+        if (f.hasFileExtension ("zip"))
+        {
+            juce::ZipFile zip (f);
+            for (int i = 0; i < zip.getNumEntries(); ++i)
+            {
+                const auto* e = zip.getEntry (i);
+                const auto sz = e != nullptr ? e->uncompressedSize : 0;
+                if (! (sz == 65536 || sz == 131072 || sz == 524288 || sz == 1048576)) continue;
+                std::unique_ptr<juce::InputStream> in (zip.createStreamForEntry (i));
+                juce::MemoryBlock mb; if (in != nullptr) in->readIntoMemoryBlock (mb);
+                add (f.getFileName() + ":" + e->filename, f.getFullPathName(), std::move (mb));
+            }
+        }
+        else
+        {
+            const auto sz = f.getSize();
+            if (! (sz == 65536 || sz == 131072 || sz == 524288 || sz == 1048576)) continue;
+            juce::MemoryBlock mb; if (f.loadFileAsData (mb)) add (f.getRelativePathFrom (src), f.getParentDirectory().getFullPathName(), std::move (mb));
+        }
+    }
+    std::printf ("scanned %d files: %d distinct control ROMs, %d distinct PCM ROMs\n", files, (int) controls.size(), (int) pcms.size());
+
+    dst.createDirectory();
+    int written = 0;
+    for (auto& c : controls)
+    {
+        std::vector<const Blob*> order;
+        for (auto& p : pcms) if (p.container == c.container) order.push_back (&p);
+        for (auto& p : pcms) if (p.container != c.container) order.push_back (&p);
+        const Blob* used = nullptr; std::shared_ptr<const la32::Rom> rom;
+        for (auto* p : order)
+        {
+            juce::String err;
+            if ((rom = la32::load (c.data, p->data, c.name, err)) == nullptr) continue;
+            if (! MuntEngine::canOpenData (c.data, p->data)) { rom = nullptr; continue; }
+            used = p; break;
+        }
+        if (used == nullptr) { std::printf ("  --  %-58s no working pair\n", c.name.toRawUTF8()); continue; }
+        const juce::String label = rom->model + (rom->version.isNotEmpty() ? " " + rom->version : juce::String());
+        auto d = dst.getChildFile (juce::File::createLegalFileName (label));
+        for (int k = 2; d.exists(); ++k) d = dst.getChildFile (juce::File::createLegalFileName (label + " (" + juce::String (k) + ")"));
+        d.createDirectory();
+        const juce::String model = rom->model == "CM-32L" ? "CM32L" : "MT32";
+        d.getChildFile (model + "_CONTROL.ROM").replaceWithData (c.data.getData(), c.data.getSize());
+        d.getChildFile (model + "_PCM.ROM").replaceWithData (used->data.getData(), used->data.getSize());
+        d.getChildFile ("source.txt").replaceWithText ("control: " + c.name + "\r\npcm:     " + used->name + "\r\n");
+        std::printf ("  OK  %-58s + %-34s -> %s\n", c.name.toRawUTF8(), used->name.toRawUTF8(), d.getFileName().toRawUTF8());
+        ++written;
+    }
+    std::printf ("\n%d working ROM set(s) written to %s\n", written, dst.getFullPathName().toRawUTF8());
+    return 0;
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
+    if (argc >= 4 && juce::String (argv[1]) == "--export")
+        return exportWorkingSets (juce::File { juce::String (argv[2]) }, juce::File { juce::String (argv[3]) });
     if (argc < 2) { std::printf ("usage: ModuleTest <rom folder> [outdir]\n"); return 1; }
     const juce::File romFolder { juce::String (argv[1]) };
     const juce::File outDir { juce::String (argc > 2 ? argv[2] : ".") };
