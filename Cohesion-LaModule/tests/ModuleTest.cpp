@@ -238,6 +238,18 @@ int main (int argc, char** argv)
         }
     }
 
+    // RESET = power cycle: ROM set reloaded, every part back to its power-on timbre, still playing
+    {
+        p.setRom (labels[labels.size() - 1]);
+        const int prog0 = p.partProgram (0);
+        p.requestProgram (0, 100); run (p, {}, 0.05, nch);
+        p.hardReset();
+        juce::MidiBuffer m; m.addEvent (juce::MidiMessage::noteOn (2, 60, (juce::uint8) 100), 0); m.addEvent (juce::MidiMessage::noteOff (2, 60), 20000);
+        const auto rr = run (p, m, 0.6, nch);
+        check (p.partProgram (0) == prog0 && p.muntReady() && rr.peak > 0.01f, "RESET reloads the ROM set and the power-on parts",
+               p.currentRomLabel() + " / " + p.partName (0) + " / peak " + juce::String (rr.peak, 3));
+    }
+
     {
         p.setRom (labels[labels.size() - 1]);
         setParam (p, lpid::part (4, "lvl"), 0.5f);

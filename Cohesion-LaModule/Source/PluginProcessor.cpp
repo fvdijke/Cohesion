@@ -182,6 +182,18 @@ void LaModuleProcessor::requestProgram (int part, int program) { Cmd c; c.kind =
 void LaModuleProcessor::requestReset() { Cmd c; c.kind = cmdReset; push (c); }
 void LaModuleProcessor::requestPanic() { Cmd c; c.kind = cmdPanic; push (c); }
 
+// Like switching the MT-32 off and on: the ROM list is scanned again, the selected set is loaded
+// fresh from disk (every Munt unit restarted) and the memory returns to its power-on state.
+void LaModuleProcessor::hardReset()
+{
+    const auto labels = romLabels();
+    juce::String label = romLabel;
+    if (! labels.contains (label)) label = labels.isEmpty() ? juce::String() : labels[0];
+    if (label.isNotEmpty()) setRom (label);
+    requestPanic();
+    sysSync = true;                                // per-part reverb back to the MT-32 defaults
+}
+
 int LaModuleProcessor::loadSyx (const juce::File& f)
 {
     juce::MemoryBlock mb;

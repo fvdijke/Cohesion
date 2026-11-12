@@ -61,6 +61,7 @@ public:
 
     void requestProgram (int part, int program);
     void requestReset();
+    void hardReset();                              // power cycle: re-read the ROM list and reload the set
     void requestPanic();
     int  loadSyx (const juce::File& f);           // number of MT-32 messages queued
 

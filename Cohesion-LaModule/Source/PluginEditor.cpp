@@ -171,7 +171,14 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
             if (f.existsAsFile()) status = f.getFileName() + ": " + juce::String (proc.loadSyx (f)) + " MT-32 message(s) loaded";
         });
     };
-    resetBtn.onClick = [this] { proc.requestReset(); status = "MT-32 reset"; };
+    resetBtn.onClick = [this]
+    {
+        proc.hardReset();
+        refreshRomBox();
+        status = proc.currentRom() != nullptr ? "MT-32 reset: " + proc.currentRomLabel() + " reloaded" : juce::String ("No ROM set found");
+        refreshAll();
+    };
+    resetBtn.setTooltip ("Power-cycle the MT-32: reload the ROM set and all parts");
     panicBtn.onClick = [this] { proc.requestPanic(); };
     for (auto* b : { &loadBtn, &resetBtn, &panicBtn }) { styleButton (*b, false); canvas.addAndMakeVisible (*b); }
 

@@ -140,7 +140,7 @@ struct HelpOverlay : juce::Component
         body ("Each strip has a fader, pan, mute / solo and an output: MAIN or the part's own output (OUT 2\xe2\x80\x93" "10; enable the extra outputs in your DAW). "
               "Click a strip to select it: the LCD and the REVERB / ECHO boxes then show that part. Reverb and echo are set per part; "
               "click a box's title to switch it on or off. An MT-32 reverb SysEx sets the reverb of every part. "
-              "RESET restores the MT-32 power-on state, PANIC stops all notes.");
+              "RESET power-cycles the MT-32: the ROM set is reloaded and every part returns to its power-on timbre. PANIC stops all notes.");
         head ("Credits");
         body ("Sound engine: Munt / mt32emu \xc2\xa9 the Munt contributors, licensed under the GNU Lesser General Public License 2.1 or later "
               "(github.com/munt/munt). It is not part of this plugin's code: it is included as the separate library mt32emu.dll next to the plugin, "
