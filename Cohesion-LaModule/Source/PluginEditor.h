@@ -28,6 +28,11 @@ public:
         g.setColour (juce::Colour (0xff9fe1cb)); g.fillPath (p);
     }
     juce::Font getComboBoxFont (juce::ComboBox&) override { return ui::font (11.0f); }
+    juce::Font getTextButtonFont (juce::TextButton& b, int h) override
+    {
+        if (b.getProperties().contains ("fontSize")) return ui::font ((float) b.getProperties()["fontSize"]);
+        return CohesionLookAndFeel::getTextButtonFont (b, h);
+    }
     void positionComboBoxText (juce::ComboBox& box, juce::Label& l) override
     {
         l.setBounds (4, 0, box.getWidth() - 18, box.getHeight());
@@ -90,7 +95,6 @@ struct PartStrip : juce::Component
     juce::TextButton muteBtn { "M" }, soloBtn { "S" };
     std::unique_ptr<ButtonAtt> muteAtt, soloAtt;
     bool selected = false, dimmed = false;
-    juce::String program;
 };
 
 struct Lcd : juce::Component

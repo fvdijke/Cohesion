@@ -579,7 +579,7 @@ namespace la32
     inline void structure (int s, bool& firstPcm, bool& secondPcm, int& mix)
     {
         static const uint8_t pcmBits[13] = { 0, 0, 2, 2, 1, 3, 3, 0, 3, 0, 2, 1, 3 };
-        static const uint8_t mixType[13] = { 0, 1, 0, 1, 1, 0, 1, 0, 0, 2, 2, 2, 2 };   // 0 a+b, 1 a+ring, 2 ring
+        static const uint8_t mixType[13] = { 0, 1, 0, 1, 1, 0, 1, 3, 3, 2, 2, 2, 2 };   // 0 a+b, 1 a+ring, 2 ring, 3 stereo pair
         s = juce::jlimit (0, 12, s);
         firstPcm = (pcmBits[s] & 2) != 0; secondPcm = (pcmBits[s] & 1) != 0; mix = mixType[s];
     }
@@ -595,7 +595,7 @@ namespace la32
             for (int pair = 0; pair < 2; ++pair)
             {
                 bool aPcm, bPcm; structure (timbre.common[10 + pair], aPcm, bPcm, mix[pair]);
-                if (! timbre.partialOn (pair * 2) || ! timbre.partialOn (pair * 2 + 1)) mix[pair] = 0;
+                if ((mix[pair] == 1 || mix[pair] == 2) && (! timbre.partialOn (pair * 2) || ! timbre.partialOn (pair * 2 + 1))) mix[pair] = 0;
                 for (int k = 0; k < 2; ++k)
                 {
                     const int idx = pair * 2 + k;
@@ -624,10 +624,43 @@ namespace la32
                 {
                     case 1:  out += a + 0.97f * a * b; break;   // partial + ring
                     case 2:  out += 1.78f * a * b; break;       // ring only
-                    default: out += a + b; break;
+                    default: out += a + b; break;               // plain mix and stereo pair (mono sum)
                 }
             }
             return out * 0.35f;
+        }
+
+        // Stereo render with the MT-32 pan law: panpot 0 (right) .. 14 (left), linear.
+        // Stereo-pair structures (8, 9) spread their two partials around the panpot.
+        void renderStereo (double pitchMult, float modWheel, int panpot, float& left, float& right)
+        {
+            left = right = 0.0f;
+            if (rom == nullptr) return;
+            static const uint8_t masterPan[15] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7 };
+            static const uint8_t slavePan[15]  = { 0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7 };
+            panpot = juce::jlimit (0, 14, panpot);
+            const int even = panpot & 0x0E;                       // the LA32 receives even pan values
+            for (int pair = 0; pair < 2; ++pair)
+            {
+                const float a = part[pair * 2].render (pitchMult, modWheel);
+                const float b = part[pair * 2 + 1].render (pitchMult, modWheel);
+                if (mix[pair] == 3)
+                {
+                    const float pa = (float) (masterPan[panpot] * 2) / 14.0f, pb = (float) (slavePan[panpot] * 2) / 14.0f;
+                    left += a * pa + b * pb; right += a * (1.0f - pa) + b * (1.0f - pb);
+                    continue;
+                }
+                float o;
+                switch (mix[pair])
+                {
+                    case 1:  o = a + 0.97f * a * b; break;
+                    case 2:  o = 1.78f * a * b; break;
+                    default: o = a + b; break;
+                }
+                const float pl = (float) even / 14.0f;
+                left += o * pl; right += o * (1.0f - pl);
+            }
+            left *= 0.35f; right *= 0.35f;
         }
 
     private:

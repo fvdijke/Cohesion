@@ -14,7 +14,7 @@ static void check (bool ok, const char* what, const juce::String& info = {})
     if (! ok) ++failures;
 }
 
-struct Render { float peak = 0, rms = 0; bool finite = true; std::vector<float> main; };
+struct Render { float peak = 0, rms = 0, side = 0; bool finite = true; std::vector<float> main; };
 
 // render `seconds` with MIDI events placed by sample position; returns main-bus stats
 static Render run (LaModuleProcessor& p, juce::MidiBuffer events, double seconds, int numBusChannels, std::vector<float>* auxPeaks = nullptr)
@@ -23,7 +23,7 @@ static Render run (LaModuleProcessor& p, juce::MidiBuffer events, double seconds
     Render r;
     juce::AudioBuffer<float> buf (numBusChannels, block);
     const int total = (int) (seconds * sr);
-    double sum = 0; int count = 0;
+    double sum = 0, sumM = 0, sumS = 0; int count = 0;
     for (int s = 0; s < total; s += block)
     {
         juce::MidiBuffer mb;
@@ -36,7 +36,7 @@ static Render run (LaModuleProcessor& p, juce::MidiBuffer events, double seconds
             const float l = buf.getSample (0, i), rr = buf.getSample (1, i);
             if (! std::isfinite (l) || ! std::isfinite (rr)) r.finite = false;
             r.peak = juce::jmax (r.peak, std::abs (l), std::abs (rr));
-            sum += l * l + rr * rr; count += 2;
+            sum += l * l + rr * rr; count += 2; sumM += (l + rr) * (l + rr); sumS += (l - rr) * (l - rr);
             r.main.push_back (0.5f * (l + rr));
         }
         if (auxPeaks != nullptr)
@@ -44,6 +44,7 @@ static Render run (LaModuleProcessor& p, juce::MidiBuffer events, double seconds
                 for (int i = 0; i < block; ++i) (*auxPeaks)[(size_t) c] = juce::jmax ((*auxPeaks)[(size_t) c], std::abs (buf.getSample (c, i)));
     }
     r.rms = (float) std::sqrt (sum / juce::jmax (1, count));
+    r.side = (float) std::sqrt (sumS / juce::jmax (1.0e-12, sumM));
     return r;
 }
 
@@ -114,6 +115,48 @@ int main (int argc, char** argv)
     check (p.setBusesLayout (layout), "all 10 stereo outputs can be enabled");
     const int nch = p.getTotalNumOutputChannels();
     p.prepareToPlay (48000.0, 480);
+
+    if (argc > 3 && juce::String (argv[3]) == "levels")
+    {
+        p.setRom ("MT-32 1.07");
+        auto db = [] (float x) { return 20.0f * std::log10 (juce::jmax (1.0e-6f, x)); };
+        for (int q = 1; q < mt::kParts; ++q) setParam (p, lpid::part (q, "mute"), 1.0f);
+        for (int prog : { 0, 4, 16, 24, 32, 40, 48, 52, 56, 61, 64, 72, 80, 88, 96, 104, 112, 120 })
+        {
+            juce::String line = juce::String (prog + 1).paddedLeft (' ', 3) + " ";
+            for (int engine = 0; engine < 2; ++engine)
+            {
+                setParam (p, lpid::engine, (float) engine);
+                juce::MidiBuffer pc; pc.addEvent (juce::MidiMessage::programChange (2, prog), 0); run (p, pc, 0.05, nch);
+                if (engine == 0) line << p.partName (0).paddedRight (' ', 11);
+                for (float rv : { 0.0f, 1.0f })
+                {
+                    setParam (p, lpid::part (0, "rev"), rv);
+                    p.requestPanic(); run (p, {}, 1.5, nch);
+                    juce::MidiBuffer m; m.addEvent (juce::MidiMessage::noteOn (2, 60, (juce::uint8) 100), 0); m.addEvent (juce::MidiMessage::noteOff (2, 60), 40000);
+                    const auto r = run (p, m, 1.0, nch);
+                    line << (engine == 0 ? " M " : " L ") << juce::String (db (r.rms), 1).paddedLeft (' ', 6) << (rv > 0 ? "(rev)" : "") << " side " << juce::String (r.side, 2);
+                }
+            }
+            std::printf ("%s\n", line.toRawUTF8());
+        }
+        for (int q = 0; q < mt::kParts; ++q) { setParam (p, lpid::part (q, "mute"), 0.0f); setParam (p, lpid::part (q, "rev"), 0.0f); }
+        for (int engine = 0; engine < 2; ++engine)
+        {
+            setParam (p, lpid::engine, (float) engine);
+            { juce::MidiBuffer pc; pc.addEvent (juce::MidiMessage::programChange (2, 0), 0); run (p, pc, 0.05, nch); }
+            for (float e : { 0.0f, 1.0f })
+            {
+                setParam (p, lpid::part (0, "ech"), e);
+                p.requestPanic(); run (p, {}, 1.5, nch);
+                juce::MidiBuffer m; m.addEvent (juce::MidiMessage::noteOn (2, 72, (juce::uint8) 110), 0); m.addEvent (juce::MidiMessage::noteOff (2, 72), 2400);
+                const auto r = run (p, m, 2.0, nch);
+                double tail = 0; for (size_t i = 14400; i < 48000; ++i) tail += r.main[i] * r.main[i];
+                std::printf ("echo %s send %.0f: 0.3-1 s %.1f dB\n", engine == 0 ? "MUNT" : "LA", e, db ((float) std::sqrt (tail / 33600.0)));
+            }
+        }
+        return 0;
+    }
 
     for (const juce::String& label : labels)
     {

@@ -77,12 +77,13 @@ public:
             const int p = v.part;
             float* dl = out.dryL[p]; float* dr = out.dryR[p]; float* fl = out.fxL[p]; float* fr = out.fxR[p];
             const float g = gainP[p] * v.gain;
-            const float gl = g * v.panL, gr = g * v.panR;
             for (int i = 0; i < n; ++i)
             {
-                const float s = v.voice.render (pm[p], modP[p]);
-                dl[i] += s * gl; dr[i] += s * gr;
-                if (v.reverb) { fl[i] += s * gl; fr[i] += s * gr; }
+                float l, r;
+                v.voice.renderStereo (pm[p], modP[p], v.panpot, l, r);
+                l *= g; r *= g;
+                dl[i] += l; dr[i] += r;
+                if (v.reverb) { fl[i] += l; fr[i] += r; }
             }
             if (v.voice.isDone()) v.active = false;
             else used += v.partials;
@@ -93,7 +94,7 @@ public:
     int activePartials() const override { return activeCount.load (std::memory_order_relaxed); }
 
 private:
-    static constexpr float kOutGain = 1.0f;        // same level as the MUNT engine in this module
+    static constexpr float kOutGain = 2.14f;       // +6.6 dB: same level as the MUNT engine (median over the timbres)
     static constexpr int kMaxVoices = 32, kPartialBudget = 32;
     static float dbGain (float db) { return db <= -150.0f ? 0.0f : std::pow (10.0f, db / 20.0f); }
 
@@ -105,7 +106,7 @@ private:
     struct V
     {
         la32::Voice voice; bool active = false, released = false, sustained = false, reverb = false;
-        int part = 0, key = 0, partials = 0; float panL = 0.707f, panR = 0.707f, gain = 1.0f; uint64_t age = 0;
+        int part = 0, key = 0, partials = 0, panpot = 7; float gain = 1.0f; uint64_t age = 0;
     };
 
     mt::Memory& mem;
@@ -116,11 +117,6 @@ private:
     int used = 0;
     std::atomic<int> activeCount { 0 };
 
-    static void panGains (float pos, float& l, float& r)   // pos -1 (left) .. +1 (right), constant power
-    {
-        const float a = (juce::jlimit (-1.0f, 1.0f, pos) + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
-        l = std::cos (a); r = std::sin (a);
-    }
     static int partialCount (const la32::Timbre& t) { int c = 0; for (int k = 0; k < 4; ++k) if (t.partialOn (k)) ++c; return c; }
 
     void release (V& v) { if (! v.released) { v.released = true; v.voice.noteOff(); } }
@@ -142,7 +138,7 @@ private:
     void noteOn (int part, int key, int vel)
     {
         if (mem.rom == nullptr) return;
-        la32::Timbre t; float levelGain = 1.0f, panPos = 0.0f; bool rev;
+        la32::Timbre t; float levelGain = 1.0f; int panpot = 7; bool rev;
         const uint8_t* pt = mem.patchTemp (part);
         int playKey = key;
         if (part == mt::kRhythmPart)
@@ -150,7 +146,7 @@ private:
             const auto rk = mem.rhythmKey (key);
             if (rk.timbre == 127 || rk.level == 0 || ! mem.rhythmTimbre (rk.timbre, t)) return;
             levelGain = dbGain (la32::tvaLevelDb (rk.level));
-            panPos = (7 - rk.pan) / 7.0f;             // panpot 0 = right, 14 = left
+            panpot = rk.pan;                           // panpot 0 = right, 14 = left
             rev = rk.reverb;
         }
         else
@@ -158,7 +154,9 @@ private:
             t = mem.timbreTemp (part);
             playKey = juce::jlimit (0, 127, key + (int) pt[2] - 24);
             const int panCc = parts[part].panCc;
-            panPos = panCc >= 0 ? (panCc - 64) / 63.0f : (7 - (int) pt[9]) / 7.0f;
+            // CC 10 is inverted on the MT-32 (127 = left); MT-32 divides by 9, CM-32L by 8.5
+            const bool mt32 = mem.rom->model.startsWith ("MT");
+            panpot = panCc >= 0 ? (mt32 ? panCc / 9 : (panCc * 8) / 68) : (int) pt[9];
             rev = pt[6] != 0;
         }
         const int need = partialCount (t);
@@ -188,6 +186,6 @@ private:
         v.active = true; v.released = false; v.sustained = false;
         v.part = part; v.key = key; v.partials = need; v.age = ++clock;
         v.gain = levelGain; v.reverb = rev;
-        panGains (panPos, v.panL, v.panR);
+        v.panpot = juce::jlimit (0, 14, panpot);
     }
 };

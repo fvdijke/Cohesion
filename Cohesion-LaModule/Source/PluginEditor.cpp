@@ -30,6 +30,7 @@ PartStrip::PartStrip (LaModuleEditor& e, LaModuleProcessor& p, int index) : ed (
     nameBtn.setColour (juce::TextButton::textColourOffId, ui::text);
     nameBtn.onClick = [this] { ed.selectPart (idx); ed.showLibrary (idx); };
     nameBtn.setTooltip ("Choose a timbre");
+    nameBtn.getProperties().set ("fontSize", 12.5f);
     addAndMakeVisible (nameBtn);
 
     fader.setSliderStyle (juce::Slider::LinearVertical);
@@ -58,8 +59,8 @@ void PartStrip::resized()
     r.removeFromTop (4);
     chBox.setBounds (r.removeFromTop (20).reduced (4, 0));
     r.removeFromTop (4);
-    nameBtn.setBounds (r.removeFromTop (34));
-    r.removeFromTop (16);                                       // program number (painted)
+    nameBtn.setBounds (r.removeFromTop (30));
+    r.removeFromTop (8);
     auto out = r.removeFromBottom (20); outBox.setBounds (out.reduced (4, 0));
     r.removeFromBottom (5);
     auto ms = r.removeFromBottom (20);
@@ -81,8 +82,6 @@ void PartStrip::paint (juce::Graphics& g)
     auto r = getLocalBounds().reduced (6, 8);
     g.setColour (ui::teal); g.setFont (ui::font (14.0f, true));
     g.drawText (idx < 8 ? juce::String (idx + 1) : juce::String ("R"), r.removeFromTop (16).withTrimmedLeft (16), juce::Justification::centred);
-    g.setColour (ui::label.withAlpha (dimmed ? 0.35f : 1.0f)); g.setFont (ui::font (10.5f));
-    g.drawText (program, getLocalBounds().withY (8 + 16 + 4 + 20 + 4 + 34).withHeight (16), juce::Justification::centred);
 }
 
 void PartStrip::mouseDown (const juce::MouseEvent&) { ed.selectPart (idx); }
@@ -104,7 +103,6 @@ void PartStrip::refresh (bool sel)
     muteBtn.setColour (juce::TextButton::buttonOnColourId, muteOn); muteBtn.setColour (juce::TextButton::textColourOnId, muteText);
     soloBtn.setColour (juce::TextButton::buttonOnColourId, soloOn); soloBtn.setColour (juce::TextButton::textColourOnId, soloText);
     nameBtn.setButtonText (proc.partName (idx));
-    program = idx < 8 ? "P " + juce::String (proc.partProgram (idx) + 1).paddedLeft ('0', 3) : juce::String ("KIT");
     led.level = juce::jmax (led.level * 0.82f, proc.takePartActivity (idx));
     led.repaint();
     repaint();
@@ -266,11 +264,15 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
     juce::ColourGradient bg (juce::Colour (0xff1b1f25), 0, 0, juce::Colour (0xff0d0f12), 0, (float) kH, false);
     g.setGradientFill (bg); g.fillAll();
 
-    // title
-    g.setColour (ui::text); g.setFont (ui::font (18.0f, true));
-    g.drawText (juce::String::fromUTF8 ("COHESION \xe2\x80\x94 LA MODULE"), 26, 16, 280, 24, juce::Justification::centredLeft);
-    g.setColour (ui::dim); g.setFont (ui::font (11.0f));
-    g.drawText ("by Pepperwood", 26, 40, 200, 16, juce::Justification::centredLeft);
+    // title + subtitles: same place and style as the other COHESION plugins
+    const auto titleFont = ui::font (18.0f, true).withExtraKerningFactor (0.14f);
+    const auto subFont   = ui::font (11.0f).withExtraKerningFactor (0.10f);
+    g.setColour (juce::Colours::white); g.setFont (titleFont);
+    g.drawText ("COHESION - LA MODULE", 22, 26, 300, 26, juce::Justification::centredLeft);
+    g.setColour (juce::Colours::white.withAlpha (0.55f)); g.setFont (subFont);
+    g.drawText ("by Pepperwood", 22, 47, 180, 16, juce::Justification::centredLeft);
+    const int subX = 22 + juce::roundToInt (titleFont.getStringWidthFloat ("COHESION - "));
+    g.drawText ("MT32 Emulator", subX, 47, 160, 16, juce::Justification::centredLeft);
     g.setColour (ui::label); g.setFont (ui::font (10.0f, true));
     g.drawText ("MIDI", 840, 26, 40, 22, juce::Justification::centredRight);
 
@@ -293,6 +295,7 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
     g.drawText ("REVERB", 36, 538, 100, 16, juce::Justification::centredLeft);
     g.drawText ("ECHO", 588, 538, 100, 16, juce::Justification::centredLeft);
     g.setColour (ui::dim); g.setFont (ui::font (10.0f));
+    g.drawText ("send parts with their ECHO knob", 640, 538, 300, 16, juce::Justification::centredLeft);
     g.drawFittedText (juce::String::fromUTF8 (proc.usingMunt() ? "MT-32 system reverb (Munt) \xc2\xb7 set by SysEx 10 00 01"
                                                                : "MT-32 style system reverb \xc2\xb7 set by SysEx 10 00 01"),
                       36, 596, 340, 36, juce::Justification::centredLeft, 2);
@@ -345,9 +348,11 @@ void LaModuleEditor::refreshAll()
     for (int i = 0; i < mt::kParts; ++i) strips[i]->refresh (i == selected);
 
     const int p = selected;
-    const juce::String num = p < 8 ? juce::String (p + 1) : juce::String ("R");
-    lcd.line = p < 8 ? num + "|" + proc.partName (p).paddedRight (' ', 11) + juce::String (proc.partProgram (p) + 1).paddedLeft ('0', 3)
-                     : juce::String ("R|Rhythm Set  KIT");
+    // fixed columns: channel | program | name
+    const int ch = (int) proc.apvts.getRawParameterValue (lpid::part (p, "ch"))->load();
+    const juce::String chText = (ch == 0 ? juce::String ("OFF") : "CH " + juce::String (ch)).paddedRight (' ', 5);
+    const juce::String prog = p < 8 ? juce::String (proc.partProgram (p) + 1).paddedLeft ('0', 3) : juce::String ("KIT");
+    lcd.line = chText + " | " + prog + " | " + proc.partName (p);
     lcd.repaint();
     canvas.repaint();
 }
