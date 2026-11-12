@@ -11,7 +11,7 @@
 
 #define AppName        "COHESION"
 #define AppPublisher   "Pepperwood"
-#define AppVersion     "1.3.0"
+#define AppVersion     "1.3.1"
 
 ; Absolute bronpaden naar de gebouwde VST3-bundels (Release)
 #define GlueSrc      "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Glue\build\Cohesion_artefacts\Release\VST3\Cohesion Glue.vst3"
@@ -105,12 +105,15 @@ var
 
 procedure InitializeWizard;
 var
-  BannerW: Integer;
+  BannerW, BannerH: Integer;
 begin
-  BannerW := ScaleX(170);
+  { --- Eigen full-height COHESION-banner links. De breedte volgt uit de hoogte in de
+        verhouding van het plaatje (763 x 2062), zodat het nooit uitgerekt wordt,
+        ook niet bij Windows-schaling. --- }
+  BannerH := WizardForm.CancelButton.Top - ScaleY(12);
+  BannerW := (BannerH * 763) div 2062;
 
-  { --- Eigen full-height COHESION-banner links op ELKE pagina.
-        Hergebruik de door Inno geladen PNG (WizardImageFile) als bitmap. --- }
+  { Hergebruik de door Inno geladen PNG (WizardImageFile) als bitmap. }
   Banner := TBitmapImage.Create(WizardForm);
   Banner.Parent  := WizardForm;
   Banner.Bitmap  := WizardForm.WizardBitmapImage.Bitmap;
@@ -118,7 +121,7 @@ begin
   Banner.Left    := 0;
   Banner.Top     := 0;
   Banner.Width   := BannerW;
-  Banner.Height  := WizardForm.CancelButton.Top - ScaleY(12);
+  Banner.Height  := BannerH;
 
   { --- Standaard welkom/afrond-afbeelding en kleine logo weg
         (voorkomt de dubbele banner op de afrondpagina). De kop-strip van Inno
@@ -130,4 +133,31 @@ begin
         de bestaande anchors laten alle controls meelopen en de breedte vullen. --- }
   WizardForm.OuterNotebook.Left  := BannerW;
   WizardForm.OuterNotebook.Width := WizardForm.ClientWidth - BannerW;
+
+  { --- Afrondpagina: geen afbeelding (Inno's eigen WizardBitmapImage2 ook niet);
+        de tekst krijgt daar de volle breedte. --- }
+  WizardForm.WizardBitmapImage2.Visible := False;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+var
+  W: Integer;
+begin
+  if CurPageID = wpFinished then
+  begin
+    Banner.Visible := False;
+    WizardForm.OuterNotebook.Left  := 0;
+    WizardForm.OuterNotebook.Width := WizardForm.ClientWidth;
+    W := WizardForm.FinishedPage.Width - ScaleX(48);
+    WizardForm.FinishedHeadingLabel.Left  := ScaleX(24);
+    WizardForm.FinishedHeadingLabel.Width := W;
+    WizardForm.FinishedLabel.Left  := ScaleX(24);
+    WizardForm.FinishedLabel.Width := W;
+  end
+  else
+  begin
+    Banner.Visible := True;
+    WizardForm.OuterNotebook.Left  := Banner.Width;
+    WizardForm.OuterNotebook.Width := WizardForm.ClientWidth - Banner.Width;
+  end;
 end;
