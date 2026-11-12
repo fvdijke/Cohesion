@@ -52,9 +52,12 @@
   MIDI-kanaal per partij, ROM-sets gedeeld met de synth; offline getest (tests/ModuleTest.cpp).
 - [x] LA MODULE: alleen nog de Munt-engine (eigen LA-engine eruit), LIBRARY leest ROM-map in,
   reverb (per Munt-instantie) en echo per partij met aan/uit, NO ROM LOADED op het LCD.
-- [ ] LA MODULE vervolg: Munt-ondersteuning voor
-  CM-32L "1.04"-set (Munt herkent die control-ROM niet), LCD-berichten (SysEx 20 00 00),
-  library-venster in huisstijl i.p.v. popupmenu, opnemen in de installer.
+- [x] LA MODULE: in de installer (1.2.x), partial-meters per partij en totaal, RESET = koude
+  start, ROM-menu (map / losse bestanden toevoegen, alles door Munt getest en benoemd, elke
+  firmwareversie een eigen set, verwijderen, ROM-map tonen), help-pagina met credits/disclaimer,
+  ModuleTest --export om werkende sets te verzamelen.
+- [ ] LA MODULE vervolg: LCD-berichten (SysEx 20 00 00), timbre-kiezer in huisstijl i.p.v.
+  popupmenu, MAME-halve chips (_a/_b, _h/_l) samenvoegen, ctrl_mt32_m9 onderzoeken.
 - [ ] (oorspronkelijke opdracht) Multi-timbrale MT-32-emulator op basis van de LA-engine: 8 melodische partijen +
   ritmepartij, elk met eigen MIDI-kanaal (standaard 2–9 + 10), program changes en
   MT-32/CM-32L SysEx (timbres, patches, systeem), 32 partials met voice-allocatie,
