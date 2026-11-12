@@ -17,7 +17,7 @@ which gives each part its own output and its own reverb (each part has 32 partia
 
 ## Features
 
-- **LIBRARY** reads your ROMs from a folder (the .zip files in it are scanned too); the picker
+- **ROM** reads your ROMs from a folder (the .zip files in it are scanned too); the picker
   next to it chooses the ROM set. Sets are shared with COHESION — SYNTH
   (`%APPDATA%\Pepperwood\Cohesion Synth\ROMs`). Without a set the LCD says NO ROM LOADED.
 - **Parts 1–8 + rhythm** on MIDI channels 2–9 and 10 by default; each part's channel is

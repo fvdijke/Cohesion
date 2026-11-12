@@ -128,11 +128,11 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
     addAndMakeVisible (canvas);
     auto& a = proc.apvts;
 
-    // --- header: LIBRARY (read ROMs from a folder) + ROM set picker ---
-    styleButton (libraryBtn, true);
-    libraryBtn.setTooltip ("Read MT-32 / CM-32L ROMs from a folder (.zip files inside are scanned too)");
-    libraryBtn.onClick = [this] { readRomFolder(); };
-    canvas.addAndMakeVisible (libraryBtn);
+    // --- header: ROM (read ROMs from a folder) + ROM set picker ---
+    styleButton (romBtn, true);
+    romBtn.setTooltip ("Read MT-32 / CM-32L ROMs from a folder (.zip files inside are scanned too)");
+    romBtn.onClick = [this] { readRomFolder(); };
+    canvas.addAndMakeVisible (romBtn);
     romBox.onChange = [this]
     {
         const auto label = romBox.getText();
@@ -183,6 +183,8 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
     rvOnBtn.setTooltip ("Reverb of the selected part on / off");
     ecOnBtn.setTooltip ("Echo of the selected part on / off");
     ecSyncBtn.setClickingTogglesState (true);
+    ecSyncBtn.setColour (juce::TextButton::buttonOnColourId, ui::tealDark);       // green when on, like the other effect buttons
+    ecSyncBtn.setColour (juce::TextButton::textColourOnId, juce::Colour (0xffeafff6));
     for (juce::Component* c : { (juce::Component*) &rvOnBtn, (juce::Component*) &ecOnBtn, (juce::Component*) &ecSyncBtn }) canvas.addAndMakeVisible (*c);
     bindFx();
 
@@ -243,7 +245,7 @@ void LaModuleEditor::bindFx()
 void LaModuleEditor::layout()
 {
     // header
-    libraryBtn.setBounds (300, 25, 96, 26);
+    romBtn.setBounds (300, 25, 96, 26);
     romBox.setBounds (404, 27, 170, 22);
     midiLed.setBounds (850, 26, 16, 22);
     master->setBounds (926, 12, 52, 48);
@@ -345,7 +347,7 @@ void LaModuleEditor::readRomFolder()
 void LaModuleEditor::showLibrary (int part)
 {
     auto rom = proc.currentRom();
-    if (rom == nullptr) { status = "Read your ROMs first with LIBRARY"; return; }
+    if (rom == nullptr) { status = "Read your ROMs first with the ROM button"; return; }
     if (part >= 8) { status = "The rhythm part plays the drum kit from the ROM / SysEx"; return; }
     juce::PopupMenu menu, ga, gb;
     for (int i = 0; i < (int) rom->melodic.size(); ++i)

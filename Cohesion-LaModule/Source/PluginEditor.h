@@ -132,7 +132,7 @@ struct HelpOverlay : juce::Component
         auto head = [&] (const char* t) { a.append (juce::String::fromUTF8 (t) + "\n", ui::font (15.0f, true), ui::teal); };
         auto body = [&] (const char* t) { a.append (juce::String::fromUTF8 (t) + "\n\n", ui::font (13.5f), ui::text); };
         head ("Getting started");
-        body ("1. Click LIBRARY and choose the folder with your MT-32 / CM-32L ROM files (control + PCM ROM; .zip files in the folder are scanned too). "
+        body ("1. Click ROM and choose the folder with your MT-32 / CM-32L ROM files (control + PCM ROM; .zip files in the folder are scanned too). "
               "Choose the ROM set in the picker next to it.\n"
               "2. Parts 1\xe2\x80\x93" "8 listen on MIDI channels 2\xe2\x80\x93" "9, the rhythm part on channel 10 (change this per part with its CH picker).\n"
               "3. Click a part's name to choose a timbre. LOAD .SYX sends an MT-32 SysEx file, e.g. the setup of a game or song.");
@@ -230,7 +230,7 @@ private:
     bool sizeRestored = false;
     int selected = 0;
 
-    juce::TextButton libraryBtn { "LIBRARY" };
+    juce::TextButton romBtn { "ROM" };
     juce::ComboBox romBox;
     Led midiLed;
     std::unique_ptr<Knob> master;

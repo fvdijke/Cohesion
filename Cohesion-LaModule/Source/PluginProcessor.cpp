@@ -150,7 +150,7 @@ romlib::ImportResult LaModuleProcessor::importRoms (const juce::Array<juce::File
 juce::String LaModuleProcessor::muntStatus() const
 {
     if (! MuntEngine::available()) return MuntEngine::unavailableReason();
-    if (mem.rom == nullptr) return "no ROM set: LIBRARY reads them from a folder";
+    if (mem.rom == nullptr) return "no ROM set: the ROM button reads them from a folder";
     if (! munt.isOpen()) return "Munt does not support this ROM set";
     return {};
 }
