@@ -13,6 +13,7 @@ namespace
         g.setColour (edge); g.drawRoundedRectangle (r.reduced (0.5f), 8.0f, 1.0f);
     }
     const juce::Colour muteOn (0xff5a2a14), muteText (0xffffe9df), soloOn (0xff5e4708), soloText (0xfffff4dc);
+    juce::String partLabel (int p) { return p < 8 ? "PART " + juce::String (p + 1) : juce::String ("RHYTHM"); }
 }
 
 // ===========================================================================
@@ -38,9 +39,7 @@ PartStrip::PartStrip (LaModuleEditor& e, LaModuleProcessor& p, int index) : ed (
     faderAtt = std::make_unique<SliderAtt> (a, lpid::part (idx, "lvl"), fader);
     addAndMakeVisible (fader);
     pan = std::make_unique<Knob> (a, lpid::part (idx, "pan"), "PAN", false);
-    rev = std::make_unique<Knob> (a, lpid::part (idx, "rev"), "REV", false);
-    ech = std::make_unique<Knob> (a, lpid::part (idx, "ech"), "ECHO", false);
-    for (auto* k : { pan.get(), rev.get(), ech.get() }) addAndMakeVisible (*k);
+    addAndMakeVisible (*pan);
 
     for (auto* b : { &muteBtn, &soloBtn }) { b->setClickingTogglesState (true); addAndMakeVisible (*b); }
     muteAtt = std::make_unique<ButtonAtt> (a, lpid::part (idx, "mute"), muteBtn);
@@ -60,17 +59,15 @@ void PartStrip::resized()
     chBox.setBounds (r.removeFromTop (20).reduced (4, 0));
     r.removeFromTop (4);
     nameBtn.setBounds (r.removeFromTop (30));
-    r.removeFromTop (8);
+    r.removeFromTop (10);
     auto out = r.removeFromBottom (20); outBox.setBounds (out.reduced (4, 0));
     r.removeFromBottom (5);
     auto ms = r.removeFromBottom (20);
     muteBtn.setBounds (ms.removeFromLeft (ms.getWidth() / 2).reduced (3, 0));
     soloBtn.setBounds (ms.reduced (3, 0));
-    r.removeFromBottom (5);
-    auto sends = r.removeFromBottom (44);
-    rev->setBounds (sends.removeFromLeft (sends.getWidth() / 2));
-    ech->setBounds (sends);
-    r.removeFromBottom (4);
+    r.removeFromBottom (6);
+    fxArea = r.removeFromBottom (16);                           // REV / ECHO indicators (painted)
+    r.removeFromBottom (6);
     auto mid = r;
     fader.setBounds (mid.removeFromLeft (mid.getWidth() / 2).reduced (6, 0));
     pan->setBounds (mid.withSizeKeepingCentre (mid.getWidth(), 50));
@@ -82,6 +79,19 @@ void PartStrip::paint (juce::Graphics& g)
     auto r = getLocalBounds().reduced (6, 8);
     g.setColour (ui::teal); g.setFont (ui::font (14.0f, true));
     g.drawText (idx < 8 ? juce::String (idx + 1) : juce::String ("R"), r.removeFromTop (16).withTrimmedLeft (16), juce::Justification::centred);
+
+    // this part's reverb / echo state (edited in the boxes below when the part is selected)
+    auto f = fxArea;
+    auto pill = [&] (juce::Rectangle<int> b, const char* t, bool on)
+    {
+        auto rr = b.reduced (3, 1).toFloat();
+        g.setColour (on ? ui::tealDark.withAlpha (dimmed ? 0.4f : 1.0f) : ui::boxBg); g.fillRoundedRectangle (rr, 3.0f);
+        g.setColour (on ? ui::teal.withAlpha (dimmed ? 0.4f : 0.8f) : juce::Colour (0xff2b3138)); g.drawRoundedRectangle (rr, 3.0f, 1.0f);
+        g.setColour (on ? juce::Colour (0xffeafff6).withAlpha (dimmed ? 0.4f : 1.0f) : ui::label.withAlpha (0.6f));
+        g.setFont (ui::font (9.0f, true)); g.drawText (t, rr, juce::Justification::centred);
+    };
+    pill (f.removeFromLeft (f.getWidth() / 2), "REV", rvOn);
+    pill (f, "ECHO", ecOn);
 }
 
 void PartStrip::mouseDown (const juce::MouseEvent&) { ed.selectPart (idx); }
@@ -95,14 +105,14 @@ void PartStrip::refresh (bool sel)
     const bool mute = muteBtn.getToggleState(), solo = soloBtn.getToggleState();
     dimmed = mute || (anySolo && ! solo);
     const float al = dimmed ? 0.3f : 1.0f;
-    for (juce::Component* c : { (juce::Component*) &nameBtn, (juce::Component*) &fader, (juce::Component*) pan.get(),
-                                (juce::Component*) rev.get(), (juce::Component*) ech.get() })
-        c->setAlpha (al);
+    for (juce::Component* c : { (juce::Component*) &nameBtn, (juce::Component*) &fader, (juce::Component*) pan.get() }) c->setAlpha (al);
     styleButton (muteBtn, mute, muteOn, muteText);
     styleButton (soloBtn, solo, soloOn, soloText);
     muteBtn.setColour (juce::TextButton::buttonOnColourId, muteOn); muteBtn.setColour (juce::TextButton::textColourOnId, muteText);
     soloBtn.setColour (juce::TextButton::buttonOnColourId, soloOn); soloBtn.setColour (juce::TextButton::textColourOnId, soloText);
     nameBtn.setButtonText (proc.partName (idx));
+    rvOn = a.getRawParameterValue (lpid::part (idx, "rv_on"))->load() > 0.5f;
+    ecOn = a.getRawParameterValue (lpid::part (idx, "ec_on"))->load() > 0.5f;
     led.level = juce::jmax (led.level * 0.82f, proc.takePartActivity (idx));
     led.repaint();
     repaint();
@@ -118,40 +128,15 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
     addAndMakeVisible (canvas);
     auto& a = proc.apvts;
 
-    // --- header ---
-    const char* engines[2] = { "MUNT", "COHESION LA" };
-    for (int i = 0; i < 2; ++i)
-    {
-        engineBtn[i].setButtonText (engines[i]);
-        engineBtn[i].onClick = [this, i]
-        {
-            if (auto* prm = proc.apvts.getParameter (lpid::engine)) prm->setValueNotifyingHost (prm->convertTo0to1 ((float) i));
-            refreshAll();
-        };
-        canvas.addAndMakeVisible (engineBtn[i]);
-    }
+    // --- header: LIBRARY (read ROMs from a folder) + ROM set picker ---
+    styleButton (libraryBtn, true);
+    libraryBtn.setTooltip ("Read MT-32 / CM-32L ROMs from a folder (.zip files inside are scanned too)");
+    libraryBtn.onClick = [this] { readRomFolder(); };
+    canvas.addAndMakeVisible (libraryBtn);
     romBox.onChange = [this]
     {
-        const int id = romBox.getSelectedId();
-        if (id == 1000)
-        {
-            chooser = std::make_unique<juce::FileChooser> ("Choose a folder with MT-32 / CM-32L ROM dumps (.zip files inside are scanned too)", juce::File());
-            chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this] (const juce::FileChooser& fc)
-            {
-                const auto items = fc.getResults();
-                if (! items.isEmpty())
-                {
-                    const auto r = proc.importRoms (items);
-                    status = "ROM sets added: " + juce::String ((int) r.added.size())
-                           + (r.duplicates > 0 ? "  |  " + juce::String (r.duplicates) + " duplicate(s) skipped" : juce::String());
-                }
-                refreshRomBox();
-            });
-            refreshRomBox();
-            return;
-        }
         const auto label = romBox.getText();
-        if (label.isNotEmpty() && label != proc.currentRomLabel()) { proc.setRom (label); refreshAll(); }
+        if (label.isNotEmpty() && label != proc.currentRomLabel()) { proc.setRom (label); status.clear(); refreshAll(); }
     };
     canvas.addAndMakeVisible (romBox);
     canvas.addAndMakeVisible (midiLed);
@@ -169,11 +154,9 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
             if (f.existsAsFile()) status = f.getFileName() + ": " + juce::String (proc.loadSyx (f)) + " MT-32 message(s) loaded";
         });
     };
-    resetBtn.onClick   = [this] { proc.requestReset(); status = "MT-32 reset"; };
-    panicBtn.onClick   = [this] { proc.requestPanic(); };
-    libraryBtn.onClick = [this] { showLibrary (selected); };
-    for (auto* b : { &loadBtn, &resetBtn, &panicBtn, &libraryBtn }) { styleButton (*b, false); canvas.addAndMakeVisible (*b); }
-    styleButton (libraryBtn, true);
+    resetBtn.onClick = [this] { proc.requestReset(); status = "MT-32 reset"; };
+    panicBtn.onClick = [this] { proc.requestPanic(); };
+    for (auto* b : { &loadBtn, &resetBtn, &panicBtn }) { styleButton (*b, false); canvas.addAndMakeVisible (*b); }
 
     // --- strips ---
     for (int i = 0; i < mt::kParts; ++i)
@@ -182,28 +165,22 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
         canvas.addAndMakeVisible (*strips[i]);
     }
 
-    // --- reverb / echo ---
+    // --- reverb / echo of the selected part ---
     const char* modes[4] = { "ROOM", "HALL", "PLATE", "TAP DELAY" };
     for (int i = 0; i < 4; ++i)
     {
         rvModeBtn[i].setButtonText (modes[i]);
-        rvModeBtn[i].onClick = [this, i] { if (auto* prm = proc.apvts.getParameter (lpid::rvMode)) prm->setValueNotifyingHost (prm->convertTo0to1 ((float) i)); };
+        rvModeBtn[i].onClick = [this, i]
+        {
+            if (auto* prm = proc.apvts.getParameter (lpid::part (selected, "rv_mode"))) prm->setValueNotifyingHost (prm->convertTo0to1 ((float) i));
+        };
         canvas.addAndMakeVisible (rvModeBtn[i]);
     }
-    rvTime  = std::make_unique<Knob> (a, lpid::rvTime, "TIME");
-    rvLevel = std::make_unique<Knob> (a, lpid::rvLevel, "LEVEL");
-    ecDiv   = std::make_unique<Knob> (a, lpid::ecDiv, "TIME");
-    ecTime  = std::make_unique<Knob> (a, lpid::ecTime, "TIME");
-    ecFb    = std::make_unique<Knob> (a, lpid::ecFb, "FEEDBACK");
-    ecLevel = std::make_unique<Knob> (a, lpid::ecLevel, "LEVEL");
-    for (auto* k : { rvTime.get(), rvLevel.get(), ecDiv.get(), ecTime.get(), ecFb.get(), ecLevel.get() }) canvas.addAndMakeVisible (*k);
+    rvOnBtn.setTooltip ("Reverb of the selected part on / off");
+    ecOnBtn.setTooltip ("Echo of the selected part on / off");
     ecSyncBtn.setClickingTogglesState (true);
-    ecSyncAtt = std::make_unique<ButtonAtt> (a, lpid::ecSync, ecSyncBtn);
-    canvas.addAndMakeVisible (ecSyncBtn);
-    rvOnAtt = std::make_unique<ButtonAtt> (a, lpid::rvOn, rvOnBtn);
-    ecOnAtt = std::make_unique<ButtonAtt> (a, lpid::ecOn, ecOnBtn);
-    canvas.addAndMakeVisible (rvOnBtn);
-    canvas.addAndMakeVisible (ecOnBtn);
+    for (juce::Component* c : { (juce::Component*) &rvOnBtn, (juce::Component*) &ecOnBtn, (juce::Component*) &ecSyncBtn }) canvas.addAndMakeVisible (*c);
+    bindFx();
 
     refreshRomBox();
 
@@ -232,33 +209,63 @@ void LaModuleEditor::resized()
     if (sizeRestored) proc.apvts.state.setProperty ("uiScale", scale, nullptr);
 }
 
+void LaModuleEditor::selectPart (int p)
+{
+    if (p != selected) { selected = p; bindFx(); }
+    refreshAll();
+}
+
+void LaModuleEditor::bindFx()
+{
+    auto& a = proc.apvts;
+    const int p = selected;
+    rvOnAtt.reset(); ecOnAtt.reset(); ecSyncAtt.reset();
+    rvOnAtt   = std::make_unique<ButtonAtt> (a, lpid::part (p, "rv_on"), rvOnBtn);
+    ecOnAtt   = std::make_unique<ButtonAtt> (a, lpid::part (p, "ec_on"), ecOnBtn);
+    ecSyncAtt = std::make_unique<ButtonAtt> (a, lpid::part (p, "ec_sync"), ecSyncBtn);
+    const juce::String dot = juce::String::fromUTF8 (" \xc2\xb7 ");
+    rvOnBtn.setButtonText ("REVERB" + dot + partLabel (p));
+    ecOnBtn.setButtonText ("ECHO" + dot + partLabel (p));
+    rvTime  = std::make_unique<Knob> (a, lpid::part (p, "rv_time"), "TIME");
+    rvLevel = std::make_unique<Knob> (a, lpid::part (p, "rv_level"), "LEVEL");
+    ecDiv   = std::make_unique<Knob> (a, lpid::part (p, "ec_div"), "TIME");
+    ecTime  = std::make_unique<Knob> (a, lpid::part (p, "ec_time"), "TIME");
+    ecFb    = std::make_unique<Knob> (a, lpid::part (p, "ec_fb"), "FEEDBACK");
+    ecLevel = std::make_unique<Knob> (a, lpid::part (p, "ec_level"), "LEVEL");
+    for (auto* k : { rvTime.get(), rvLevel.get(), ecDiv.get(), ecTime.get(), ecFb.get(), ecLevel.get() }) canvas.addAndMakeVisible (*k);
+    layoutFx();
+}
+
 void LaModuleEditor::layout()
 {
     // header
-    engineBtn[0].setBounds (300, 24, 70, 26);
-    engineBtn[1].setBounds (370, 24, 104, 26);
-    romBox.setBounds (488, 26, 150, 22);
+    libraryBtn.setBounds (300, 25, 96, 26);
+    romBox.setBounds (404, 27, 170, 22);
     midiLed.setBounds (884, 26, 16, 22);
     master->setBounds (962, 12, 52, 48);
 
     // LCD row (y 76..148)
     lcd.setBounds (30, 88, 420, 48);
-    loadBtn.setBounds (474, 114, 96, 24);
-    resetBtn.setBounds (576, 114, 74, 24);
-    panicBtn.setBounds (656, 114, 74, 24);
-    libraryBtn.setBounds (736, 114, 96, 24);
+    loadBtn.setBounds (474, 114, 110, 24);
+    resetBtn.setBounds (592, 114, 84, 24);
+    panicBtn.setBounds (684, 114, 84, 24);
 
     // strips (y 160..520)
     const int x0 = 20, w = 1000, gap = 6, sw = (w - gap * 8) / 9;
     for (int i = 0; i < mt::kParts; ++i) strips[i]->setBounds (x0 + i * (sw + gap), 160, sw, 360);
 
-    // reverb (20..560) / echo (572..1020), y 530..646
     for (int i = 0; i < 4; ++i) rvModeBtn[i].setBounds (36 + i * 82, 562, i == 3 ? 90 : 76, 24);
+    ecSyncBtn.setBounds (952, 538, 56, 22);
+    rvOnBtn.setBounds (32, 537, 200, 18);
+    ecOnBtn.setBounds (584, 537, 200, 18);
+    layoutFx();
+}
+
+void LaModuleEditor::layoutFx()
+{
+    if (rvTime == nullptr) return;
     rvTime->setBounds (390, 540, 70, 98);
     rvLevel->setBounds (466, 540, 70, 98);
-    ecSyncBtn.setBounds (952, 538, 56, 22);
-    rvOnBtn.setBounds (32, 537, 90, 18);
-    ecOnBtn.setBounds (584, 537, 70, 18);
     ecDiv->setBounds (600, 552, 90, 86);
     ecTime->setBounds (600, 552, 90, 86);
     ecFb->setBounds (720, 552, 90, 86);
@@ -287,21 +294,18 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
     g.setColour (ui::label); g.setFont (ui::font (10.0f, true));
     g.drawText ("PARTIALS", 474, 84, 100, 14, juce::Justification::centredLeft);
     g.setColour (ui::text); g.setFont (ui::font (11.0f));
-    g.drawText (juce::String (partialCount) + " / 32", 732, 84, 100, 14, juce::Justification::centredRight);
-    auto bar = juce::Rectangle<float> (474.0f, 101.0f, 358.0f, 6.0f);
+    g.drawText (juce::String (partialCount) + " / 32", 668, 84, 100, 14, juce::Justification::centredRight);
+    auto bar = juce::Rectangle<float> (474.0f, 101.0f, 294.0f, 6.0f);
     g.setColour (juce::Colour (0xff13181d)); g.fillRoundedRectangle (bar, 3.0f);
     g.setColour (ui::teal.withAlpha (0.8f)); g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, partialFrac)), 3.0f);
     g.setColour (ui::dim); g.setFont (ui::font (10.5f));
-    g.drawFittedText (status, 848, 84, 164, 54, juce::Justification::centredLeft, 4);
+    g.drawFittedText (status, 790, 84, 222, 54, juce::Justification::centredLeft, 4);
 
-    // reverb / echo panels
+    // reverb / echo panels (they edit the selected part)
     panelBox (g, { 20.0f, 530.0f, 540.0f, 116.0f });
     panelBox (g, { 572.0f, 530.0f, 448.0f, 116.0f });
-    g.setColour (ui::label); g.setFont (ui::font (10.0f, true));
     g.setColour (ui::dim); g.setFont (ui::font (10.0f));
-    g.drawText ("send parts with their ECHO knob", 660, 538, 280, 16, juce::Justification::centredLeft);
-    g.drawFittedText (juce::String::fromUTF8 (proc.usingMunt() ? "MT-32 system reverb (Munt) \xc2\xb7 set by SysEx 10 00 01"
-                                                               : "MT-32 style system reverb \xc2\xb7 set by SysEx 10 00 01"),
+    g.drawFittedText (juce::String::fromUTF8 ("MT-32 reverb of this part (its own Munt unit) \xc2\xb7 SysEx 10 00 01 sets all parts"),
                       36, 596, 340, 36, juce::Justification::centredLeft, 2);
 }
 
@@ -310,17 +314,32 @@ void LaModuleEditor::refreshRomBox()
     romBox.clear (juce::dontSendNotification);
     const auto labels = proc.romLabels();
     for (int i = 0; i < labels.size(); ++i) romBox.addItem (labels[i], i + 1);
-    romBox.addSeparator();
-    romBox.addItem ("Import ROMs...", 1000);
     const int cur = labels.indexOf (proc.currentRomLabel());
     if (cur >= 0) romBox.setSelectedId (cur + 1, juce::dontSendNotification);
     else romBox.setText ("No ROM set", juce::dontSendNotification);
 }
 
+void LaModuleEditor::readRomFolder()
+{
+    chooser = std::make_unique<juce::FileChooser> ("Choose the folder with your MT-32 / CM-32L ROMs (.zip files inside are scanned too)", juce::File());
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories, [this] (const juce::FileChooser& fc)
+    {
+        const auto items = fc.getResults();
+        if (items.isEmpty()) return;
+        const auto r = proc.importRoms (items);
+        if (r.added.empty() && r.duplicates == 0) status = "No MT-32 / CM-32L control + PCM ROM pair found in that folder";
+        else status = "ROM sets added: " + juce::String ((int) r.added.size())
+                    + (r.duplicates > 0 ? "  |  " + juce::String (r.duplicates) + " already present" : juce::String());
+        if (! r.added.empty() && proc.currentRomLabel() != r.added.front()->label) proc.setRom (r.added.front()->label);
+        refreshRomBox();
+        refreshAll();
+    });
+}
+
 void LaModuleEditor::showLibrary (int part)
 {
     auto rom = proc.currentRom();
-    if (rom == nullptr) { status = juce::String::fromUTF8 ("Import a ROM set first (ROM picker \xe2\x86\x92 Import ROMs...)"); return; }
+    if (rom == nullptr) { status = "Read your ROMs first with LIBRARY"; return; }
     if (part >= 8) { status = "The rhythm part plays the drum kit from the ROM / SysEx"; return; }
     juce::PopupMenu menu, ga, gb;
     for (int i = 0; i < (int) rom->melodic.size(); ++i)
@@ -339,11 +358,10 @@ void LaModuleEditor::showLibrary (int part)
 
 void LaModuleEditor::refreshAll()
 {
-    const bool munt = proc.usingMunt();
-    const int want = (int) proc.apvts.getRawParameterValue (lpid::engine)->load();
-    styleButton (engineBtn[0], want == 0);
-    styleButton (engineBtn[1], want == 1);
-    for (int i = 0; i < 4; ++i) styleButton (rvModeBtn[i], (int) proc.apvts.getRawParameterValue (lpid::rvMode)->load() == i);
+    const int p = selected;
+    auto& a = proc.apvts;
+    const int mode = (int) a.getRawParameterValue (lpid::part (p, "rv_mode"))->load();
+    for (int i = 0; i < 4; ++i) styleButton (rvModeBtn[i], mode == i);
     const bool sync = ecSyncBtn.getToggleState();
     styleButton (ecSyncBtn, sync);
     ecDiv->setVisible (sync); ecTime->setVisible (! sync);
@@ -352,16 +370,17 @@ void LaModuleEditor::refreshAll()
                      (juce::Component*) &rvModeBtn[3], (juce::Component*) rvTime.get(), (juce::Component*) rvLevel.get() }) c->setAlpha (rvA);
     for (auto* c : { (juce::Component*) &ecSyncBtn, (juce::Component*) ecDiv.get(), (juce::Component*) ecTime.get(),
                      (juce::Component*) ecFb.get(), (juce::Component*) ecLevel.get() }) c->setAlpha (ecA);
-    if (want == 0 && ! munt && proc.muntStatus().isNotEmpty() && status.isEmpty())
-        status = "MUNT unavailable (" + proc.muntStatus() + "): playing COHESION LA";
+
+    if (status.isEmpty() && proc.muntStatus().isNotEmpty()) status = proc.muntStatus();
     for (int i = 0; i < mt::kParts; ++i) strips[i]->refresh (i == selected);
 
-    const int p = selected;
-    // fixed columns: channel | program | name
-    const int ch = (int) proc.apvts.getRawParameterValue (lpid::part (p, "ch"))->load();
+    // LCD: channel | program | name in fixed columns
+    const int ch = (int) a.getRawParameterValue (lpid::part (p, "ch"))->load();
     const juce::String chText = (ch == 0 ? juce::String ("OFF") : "CH " + juce::String (ch)).paddedRight (' ', 5);
     const juce::String prog = p < 8 ? juce::String (proc.partProgram (p) + 1).paddedLeft ('0', 3) : juce::String ("KIT");
-    lcd.line = chText + " | " + prog + " | " + proc.partName (p);
+    if (proc.currentRom() == nullptr) lcd.line = "NO ROM LOADED";
+    else if (! proc.muntReady())       lcd.line = "ROM NOT SUPPORTED";
+    else                               lcd.line = chText + " | " + prog + " | " + proc.partName (p);
     lcd.repaint();
     canvas.repaint();
 }
@@ -371,7 +390,5 @@ void LaModuleEditor::timerCallback()
     midiLed.level = juce::jmax (midiLed.level * 0.8f, proc.takeMidiActivity()); midiLed.repaint();
     partialCount = proc.activePartials();
     partialFrac = partialFrac * 0.6f + 0.4f * (partialCount / 32.0f);
-    const auto v = proc.memoryVersion();
-    if (v != lastVersion) { lastVersion = v; }
     refreshAll();
 }

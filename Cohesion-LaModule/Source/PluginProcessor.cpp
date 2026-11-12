@@ -8,43 +8,37 @@ namespace
 
 juce::AudioProcessor::BusesProperties LaModuleProcessor::makeBuses()
 {
-    {
-        auto b = BusesProperties().withOutput ("Main", juce::AudioChannelSet::stereo(), true);
-        for (int p = 0; p < mt::kParts; ++p)
-            b = b.withOutput (p < 8 ? "Part " + juce::String (p + 1) : juce::String ("Rhythm"), juce::AudioChannelSet::stereo(), false);
-        return b;
-    }
+    auto b = BusesProperties().withOutput ("Main", juce::AudioChannelSet::stereo(), true);
+    for (int p = 0; p < mt::kParts; ++p)
+        b = b.withOutput (p < 8 ? "Part " + juce::String (p + 1) : juce::String ("Rhythm"), juce::AudioChannelSet::stereo(), false);
+    return b;
 }
 
 LaModuleProcessor::LaModuleProcessor()
     : juce::AudioProcessor (makeBuses()),
       apvts (*this, nullptr, "LaModule", createLayout())
 {
-    for (int p = 0; p < mt::kParts; ++p) { lastVolume[p] = -1; lastPan[p] = -1; lastExpr[p] = -1; }
     for (int p = 0; p < mt::kParts; ++p)
     {
+        lastVolume[p] = lastPan[p] = lastExpr[p] = -1;
+        sentReverb[p][0] = sentReverb[p][1] = sentReverb[p][2] = -1;
+        rvGain[p] = 1.0f; ecGain[p] = 0.0f;
         auto raw = [&] (const char* w) { return apvts.getRawParameterValue (lpid::part (p, w)); };
-        pCh[p] = raw ("ch"); pLvl[p] = raw ("lvl"); pPan[p] = raw ("pan"); pRev[p] = raw ("rev");
-        pEch[p] = raw ("ech"); pMute[p] = raw ("mute"); pSolo[p] = raw ("solo"); pOut[p] = raw ("out");
+        auto& q = pp[p];
+        q.ch = raw ("ch"); q.lvl = raw ("lvl"); q.pan = raw ("pan"); q.mute = raw ("mute"); q.solo = raw ("solo"); q.out = raw ("out");
+        q.rvOn = raw ("rv_on"); q.rvMode = raw ("rv_mode"); q.rvTime = raw ("rv_time"); q.rvLevel = raw ("rv_level");
+        q.ecOn = raw ("ec_on"); q.ecSync = raw ("ec_sync"); q.ecDiv = raw ("ec_div"); q.ecTime = raw ("ec_time"); q.ecFb = raw ("ec_fb"); q.ecLevel = raw ("ec_level");
     }
-    auto rawId = [&] (const char* id) { return apvts.getRawParameterValue (id); };
-    pEngine = rawId (lpid::engine); pMaster = rawId (lpid::master);
-    pEcSync = rawId (lpid::ecSync); pEcDiv = rawId (lpid::ecDiv);
-    pEcTime = rawId (lpid::ecTime); pEcFb = rawId (lpid::ecFb);
-    pEcLevel = rawId (lpid::ecLevel);
-    pRvOn = rawId (lpid::rvOn); pEcOn = rawId (lpid::ecOn);
-    for (auto* id : { lpid::rvMode, lpid::rvTime, lpid::rvLevel }) apvts.addParameterListener (id, this);
+    pMaster = apvts.getRawParameterValue (lpid::master);
 
     const auto sets = romlib::storedSets();
     if (! sets.empty()) setRom (sets.front()->label);
-    active = &laEngine;
     startTimerHz (20);
 }
 
 LaModuleProcessor::~LaModuleProcessor()
 {
     stopTimer();
-    for (auto* id : { lpid::rvMode, lpid::rvTime, lpid::rvLevel }) apvts.removeParameterListener (id, this);
     munt.close();
 }
 
@@ -60,7 +54,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout LaModuleProcessor::createLay
                AudioParameterFloatAttributes().withStringFromValueFunction (pct).withValueFromStringFunction (fromPct)));
     };
 
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::engine, 1 }, "Engine", StringArray { "MUNT", "COHESION LA" }, 0));
     floatPct (lpid::master, "Master", 0.0f, 1.5f, 1.0f);
 
     StringArray chans { "OFF" }; for (int c = 1; c <= 16; ++c) chans.add ("CH " + String (c));
@@ -72,25 +65,26 @@ juce::AudioProcessorValueTreeState::ParameterLayout LaModuleProcessor::createLay
         l.add (std::make_unique<AudioParameterFloat> (ParameterID { lpid::part (p, "pan"), 1 }, nm + " Pan", NormalisableRange<float> (-1.0f, 1.0f, 0.01f), 0.0f,
                AudioParameterFloatAttributes().withStringFromValueFunction ([] (float v, int)
                { const int x = juce::roundToInt (v * 100.0f); return x == 0 ? String ("C") : (x < 0 ? "L" + String (-x) : "R" + String (x)); })));
-        floatPct (lpid::part (p, "rev"), nm + " Reverb", 0.0f, 1.0f, 1.0f);
-        floatPct (lpid::part (p, "ech"), nm + " Echo", 0.0f, 1.0f, 0.0f);
         l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::part (p, "mute"), 1 }, nm + " Mute", false));
         l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::part (p, "solo"), 1 }, nm + " Solo", false));
         l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::part (p, "out"), 1 }, nm + " Output",
                StringArray { "MAIN", "OUT " + String (p + 2) }, 0));
+        // per-part MT-32 reverb (the part's own Munt instance)
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::part (p, "rv_on"), 1 }, nm + " Reverb On", true));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::part (p, "rv_mode"), 1 }, nm + " Reverb Mode",
+               StringArray { "ROOM", "HALL", "PLATE", "TAP DELAY" }, 0));
+        l.add (std::make_unique<AudioParameterInt> (ParameterID { lpid::part (p, "rv_time"), 1 }, nm + " Reverb Time", 0, 7, 5));
+        l.add (std::make_unique<AudioParameterInt> (ParameterID { lpid::part (p, "rv_level"), 1 }, nm + " Reverb Level", 0, 7, 3));
+        // per-part echo
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::part (p, "ec_on"), 1 }, nm + " Echo On", false));
+        l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::part (p, "ec_sync"), 1 }, nm + " Echo Sync", true));
+        l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::part (p, "ec_div"), 1 }, nm + " Echo Division",
+               StringArray { "1/2", "1/4", "1/4 D", "1/8", "1/8 D", "1/8 T", "1/16" }, 4));
+        l.add (std::make_unique<AudioParameterFloat> (ParameterID { lpid::part (p, "ec_time"), 1 }, nm + " Echo Time",
+               NormalisableRange<float> (20.0f, 1500.0f, 1.0f, 0.5f), 375.0f, AudioParameterFloatAttributes().withLabel ("ms")));
+        floatPct (lpid::part (p, "ec_fb"), nm + " Echo Feedback", 0.0f, 0.9f, 0.35f);
+        floatPct (lpid::part (p, "ec_level"), nm + " Echo Level", 0.0f, 1.0f, 0.4f);
     }
-    l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::rvOn, 1 }, "Reverb On", true));
-    l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::ecOn, 1 }, "Echo On", true));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::rvMode, 1 }, "Reverb Mode", StringArray { "ROOM", "HALL", "PLATE", "TAP DELAY" }, 0));
-    l.add (std::make_unique<AudioParameterInt> (ParameterID { lpid::rvTime, 1 }, "Reverb Time", 0, 7, 5));
-    l.add (std::make_unique<AudioParameterInt> (ParameterID { lpid::rvLevel, 1 }, "Reverb Level", 0, 7, 3));
-    l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::ecSync, 1 }, "Echo Sync", true));
-    l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::ecDiv, 1 }, "Echo Division",
-           StringArray { "1/2", "1/4", "1/4 D", "1/8", "1/8 D", "1/8 T", "1/16" }, 4));
-    l.add (std::make_unique<AudioParameterFloat> (ParameterID { lpid::ecTime, 1 }, "Echo Time", NormalisableRange<float> (20.0f, 1500.0f, 1.0f, 0.5f), 375.0f,
-           AudioParameterFloatAttributes().withLabel ("ms")));
-    floatPct (lpid::ecFb, "Echo Feedback", 0.0f, 0.9f, 0.35f);
-    floatPct (lpid::ecLevel, "Echo Level", 0.0f, 1.0f, 0.5f);
     return l;
 }
 
@@ -110,10 +104,9 @@ void LaModuleProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     sr = sampleRate;
     blockMax = juce::jmax (32, samplesPerBlock);
     partBuf.assign ((size_t) (mt::kParts * 4 * blockMax), 0.0f);
-    busBuf.assign ((size_t) (8 * blockMax), 0.0f);
-    laEngine.prepare (sr, blockMax);
+    scratch.assign ((size_t) (2 * blockMax), 0.0f);
     munt.prepare (sr, blockMax);
-    reverb.prepare (sr); tapDelay.prepare (sr); echo.prepare (sr);
+    for (auto& e : echo) e.prepare (sr);
     needResync = true;
 }
 
@@ -134,7 +127,7 @@ bool LaModuleProcessor::setRom (const juce::String& label, bool keepMemory)
     if (rom == nullptr) return false;
     const auto dir = romlib::setDir (label);
     const juce::ScopedLock sl (getCallbackLock());
-    if (active != nullptr) active->allSoundOff();
+    munt.allSoundOff();
     if (keepMemory) mem.rom = rom; else mem.init (rom);
     romLabel = label;
     munt.close();
@@ -157,8 +150,8 @@ romlib::ImportResult LaModuleProcessor::importRoms (const juce::Array<juce::File
 juce::String LaModuleProcessor::muntStatus() const
 {
     if (! MuntEngine::available()) return MuntEngine::unavailableReason();
-    if (mem.rom == nullptr) return "no ROM set";
-    if (! munt.isOpen()) return "Munt could not open this ROM set";
+    if (mem.rom == nullptr) return "no ROM set: LIBRARY reads them from a folder";
+    if (! munt.isOpen()) return "Munt does not support this ROM set";
     return {};
 }
 
@@ -215,15 +208,7 @@ int LaModuleProcessor::loadSyx (const juce::File& f)
     return count;
 }
 
-void LaModuleProcessor::parameterChanged (const juce::String& id, float v)
-{
-    if (applyingFromMemory) return;
-    const int value = juce::roundToInt (v);
-    if (id == lpid::rvMode)  pushSysex (mt::Memory::systemWrite (1, value));
-    if (id == lpid::rvTime)  pushSysex (mt::Memory::systemWrite (2, value));
-    if (id == lpid::rvLevel) pushSysex (mt::Memory::systemWrite (3, value));
-}
-
+// MT-32 system-reverb SysEx (from MIDI or a .syx) sets the reverb of every part.
 void LaModuleProcessor::timerCallback()
 {
     auto set = [this] (const juce::String& id, float plain)
@@ -235,13 +220,12 @@ void LaModuleProcessor::timerCallback()
         }
     };
     if (sysSync.exchange (false))
-    {
-        applyingFromMemory = true;
-        set (lpid::rvMode, (float) mem.reverbMode());
-        set (lpid::rvTime, (float) mem.reverbTime());
-        set (lpid::rvLevel, (float) mem.reverbLevel());
-        applyingFromMemory = false;
-    }
+        for (int p = 0; p < mt::kParts; ++p)
+        {
+            set (lpid::part (p, "rv_mode"), (float) mem.reverbMode());
+            set (lpid::part (p, "rv_time"), (float) mem.reverbTime());
+            set (lpid::part (p, "rv_level"), (float) mem.reverbLevel());
+        }
     if (chanSync.exchange (false))
         for (int p = 0; p < mt::kParts; ++p)
             set (lpid::part (p, "ch"), (float) (chanFromSysex[p] >= 16 ? 0 : chanFromSysex[p] + 1));
@@ -253,14 +237,36 @@ void LaModuleProcessor::timerCallback()
 void LaModuleProcessor::applySysex (const uint8_t* d, int n, bool fromMidi)
 {
     uint8_t before[mt::kParts]; for (int p = 0; p < mt::kParts; ++p) before[p] = (uint8_t) mem.channelAssign (p);
+    const int rvBefore = mem.reverbMode() * 64 + mem.reverbTime() * 8 + mem.reverbLevel();
     if (! mem.sysex (d, n)) return;
-    if (active == &munt) munt.sysex (d, n, 0);
-    if (mem.systemChanged) { mem.systemChanged = false; sysSync = true; }
+    munt.sysex (d, n, 0);
+    if (mem.systemChanged)
+    {
+        mem.systemChanged = false;
+        // a system write may have touched the reverb of every instance: restore the per-part settings,
+        // unless the write changed the reverb itself (then all parts follow it via the timer)
+        if (mem.reverbMode() * 64 + mem.reverbTime() * 8 + mem.reverbLevel() != rvBefore) sysSync = true;
+        sendPartReverbs (true);
+    }
     if (fromMidi)
     {
         bool changed = false;
         for (int p = 0; p < mt::kParts; ++p) { chanFromSysex[p] = mem.channelAssign (p); changed |= chanFromSysex[p] != before[p]; }
         if (changed) chanSync = true;
+    }
+}
+
+void LaModuleProcessor::sendPartReverbs (bool force)
+{
+    if (! munt.isOpen()) return;
+    for (int p = 0; p < mt::kParts; ++p)
+    {
+        const int v[3] = { (int) pp[p].rvMode->load(), (int) pp[p].rvTime->load(), (int) pp[p].rvLevel->load() };
+        if (! force && v[0] == sentReverb[p][0] && v[1] == sentReverb[p][1] && v[2] == sentReverb[p][2]) continue;
+        const uint8_t data[3] = { (uint8_t) v[0], (uint8_t) v[1], (uint8_t) v[2] };
+        const auto s = mt::Memory::dt1 (mt::kSystem + 1, data, 3);
+        munt.sysexTo (p, s.data(), (int) s.size(), 0);
+        for (int k = 0; k < 3; ++k) sentReverb[p][k] = v[k];
     }
 }
 
@@ -272,6 +278,7 @@ void LaModuleProcessor::resyncMunt()
         auto cc = [&] (int c, int v) { if (v >= 0) { const uint8_t m[3] { 0xB0, (uint8_t) c, (uint8_t) v }; munt.message (p, m, 3, 0); } };
         cc (7, lastVolume[p]); cc (10, lastPan[p]); cc (11, lastExpr[p]);
     }
+    sendPartReverbs (true);
 }
 
 void LaModuleProcessor::handleMidi (const juce::MidiMessage& m)
@@ -282,12 +289,12 @@ void LaModuleProcessor::handleMidi (const juce::MidiMessage& m)
     if (ch <= 0) return;
     for (int p = 0; p < mt::kParts; ++p)
     {
-        if ((int) pCh[p]->load() != ch) continue;
+        if ((int) pp[p].ch->load() != ch) continue;
         const uint8_t* raw = m.getRawData();
         const int len = m.getRawDataSize();
         if (m.isProgramChange())
         {
-            if (p < 8) { mem.programChange (p, m.getProgramChangeNumber()); active->message (p, raw, len, 0); }
+            if (p < 8) { mem.programChange (p, m.getProgramChangeNumber()); munt.message (p, raw, len, 0); }
             continue;
         }
         if (m.isController())
@@ -296,7 +303,7 @@ void LaModuleProcessor::handleMidi (const juce::MidiMessage& m)
             if (c == 7) lastVolume[p] = v; else if (c == 10) lastPan[p] = v; else if (c == 11) lastExpr[p] = v;
         }
         if (m.isNoteOn()) activity[p] = 1.0f;
-        active->message (p, raw, len, 0);
+        munt.message (p, raw, len, 0);
     }
 }
 
@@ -306,7 +313,7 @@ void LaModuleProcessor::renderEngine (int from, int to)
     PartBuffers b;
     for (int p = 0; p < mt::kParts; ++p)
     { b.dryL[p] = pb (p, 0) + from; b.dryR[p] = pb (p, 1) + from; b.fxL[p] = pb (p, 2) + from; b.fxR[p] = pb (p, 3) + from; }
-    active->render (b, to - from);
+    munt.render (b, to - from);
 }
 
 void LaModuleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
@@ -316,12 +323,8 @@ void LaModuleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     buffer.clear();
     if (partBuf.empty()) return;
 
-    // engine choice (MUNT falls back to COHESION LA when Munt is not available)
-    const bool wantMunt = pEngine->load() < 0.5f && munt.isOpen();
-    ModuleEngine* e = wantMunt ? static_cast<ModuleEngine*> (&munt) : static_cast<ModuleEngine*> (&laEngine);
-    if (e != active) { if (active) active->allSoundOff(); active = e; if (wantMunt) needResync = true; }
-    activeIsMunt = wantMunt;
-    if (needResync) { if (wantMunt) { munt.allSoundOff(); resyncMunt(); } needResync = false; }
+    if (needResync) { if (munt.isOpen()) { munt.allSoundOff(); resyncMunt(); } needResync = false; }
+    sendPartReverbs (false);
 
     // commands from the editor
     {
@@ -338,15 +341,15 @@ void LaModuleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                     {
                         mem.programChange (c.part, c.value);
                         const uint8_t pc[2] { 0xC0, (uint8_t) (c.value & 127) };
-                        active->message (c.part, pc, 2, 0);
+                        munt.message (c.part, pc, 2, 0);
                     }
                     break;
                 case cmdReset:
-                    laEngine.allSoundOff(); munt.allSoundOff();
+                    munt.allSoundOff();
                     mem.init (mem.rom); sysSync = true;
-                    if (active == &munt) resyncMunt();
+                    resyncMunt();
                     break;
-                case cmdPanic: laEngine.allSoundOff(); munt.allSoundOff(); break;
+                case cmdPanic: munt.allSoundOff(); for (auto& e : echo) e.reset(); break;
                 default: break;
             }
         };
@@ -372,94 +375,64 @@ void LaModuleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         }
         if (cur < len) renderEngine (cur, len);
 
-        // ---- mixer ----
-        float* rvL = busBuf.data(); float* rvR = rvL + blockMax; float* ecL = rvR + blockMax; float* ecR = ecL + blockMax;
-        float* wtL = ecR + blockMax; float* wtR = wtL + blockMax;
-        juce::FloatVectorOperations::clear (busBuf.data(), 6 * blockMax);
+        // ---- mixer: dry + the part's own reverb + the part's own echo -> the part's output ----
         auto main = getBusBuffer (buffer, false, 0);
         float* mL = main.getWritePointer (0, s0);
         float* mR = main.getNumChannels() > 1 ? main.getWritePointer (1, s0) : mL;
+        float* eL = scratch.data(); float* eR = eL + blockMax;
+        const float step = 1.0f / (float) (0.01 * sr);           // 10 ms on / off fades
 
         bool anySolo = false;
-        for (int p = 0; p < mt::kParts; ++p) anySolo |= pSolo[p]->load() > 0.5f;
-        const bool munted = active == &munt;
+        for (int p = 0; p < mt::kParts; ++p) anySolo |= pp[p].solo->load() > 0.5f;
         for (int p = 0; p < mt::kParts; ++p)
         {
-            const bool mute = pMute[p]->load() > 0.5f;
-            const bool solo = pSolo[p]->load() > 0.5f;
-            const float g = (mute || (anySolo && ! solo)) ? 0.0f : faderGain (pLvl[p]->load());
-            const float pan = pPan[p]->load();
+            const auto& q = pp[p];
+            const bool mute = q.mute->load() > 0.5f, solo = q.solo->load() > 0.5f;
+            const float g = (mute || (anySolo && ! solo)) ? 0.0f : faderGain (q.lvl->load());
+            const float pan = q.pan->load();
             const float gl = g * (pan > 0.0f ? 1.0f - pan : 1.0f), gr = g * (pan < 0.0f ? 1.0f + pan : 1.0f);
-            const float rev = pRev[p]->load();
-            const float ech = pEch[p]->load();
 
             float* oL = mL; float* oR = mR;
-            if (pOut[p]->load() > 0.5f)
+            if (q.out->load() > 0.5f)
                 if (auto* bus = getBus (false, p + 1); bus != nullptr && bus->isEnabled() && bus->getNumberOfChannels() == 2)
                 {
                     auto aux = getBusBuffer (buffer, false, p + 1);
                     oL = aux.getWritePointer (0, s0); oR = aux.getWritePointer (1, s0);
                 }
-            const float* dL = pb (p, 0); const float* dR = pb (p, 1); const float* fL = pb (p, 2); const float* fR = pb (p, 3);
-            if (g <= 0.0f) continue;
+            const float* dL = pb (p, 0); const float* dR = pb (p, 1); const float* wL = pb (p, 2); const float* wR = pb (p, 3);
+
+            const float rvT = q.rvOn->load() > 0.5f ? 1.0f : 0.0f;
+            const float ecT = q.ecOn->load() > 0.5f ? 1.0f : 0.0f;
+            const bool echoRuns = ecT > 0.0f || ecGain[p] > 0.0f;
+            if (echoRuns && ecGain[p] <= 0.0f) echo[p].reset();           // fresh start when switched on
+
             for (int i = 0; i < len; ++i)
             {
+                rvGain[p] += juce::jlimit (-step, step, rvT - rvGain[p]);
                 const float l = dL[i] * gl, r = dR[i] * gr;
-                oL[i] += l; oR[i] += r;
-                ecL[i] += l * ech; ecR[i] += r * ech;
+                oL[i] += l + wL[i] * gl * rvGain[p];
+                oR[i] += r + wR[i] * gr * rvGain[p];
+                eL[i] = l; eR[i] = r;
             }
-            float* tL = munted ? wtL : rvL; float* tR = munted ? wtR : rvR;
-            for (int i = 0; i < len; ++i) { tL[i] += fL[i] * gl * rev; tR[i] += fR[i] * gr * rev; }
-        }
-
-        // ---- own MT-32 style reverb (the Munt engine brings its own) ----
-        if (! munted)
-        {
-            const int mode = mem.reverbMode(), time = mem.reverbTime(), level = mem.reverbLevel();
-            fx::FxParams fp;
-            if (mode == 3)
+            if (echoRuns)
             {
-                fp.ecTime = 60.0f + time * 45.0f; fp.ecSync = 0; fp.ecFb = 0.45f; fp.ecDamp = 0.35f; fp.ecWidth = 1.0f; fp.ecPing = true; fp.ecMix = 1.0f;
-                tapDelay.process (rvL, rvR, len, fp);
-            }
-            else
-            {
-                static const float size[3] = { 0.3f, 0.75f, 0.5f }, damp[3] = { 0.45f, 0.35f, 0.1f }, base[3] = { 0.22f, 0.32f, 0.28f };
-                fp.rvSize = size[mode]; fp.rvDamp = damp[mode]; fp.rvDecay = base[mode] + time * 0.05f;
-                fp.rvPre = mode == 1 ? 18.0f : 6.0f; fp.rvWidth = 1.0f; fp.rvLowCut = 90.0f; fp.rvMix = 1.0f;
-                reverb.process (rvL, rvR, len, fp);
-            }
-            const float lv = std::pow (level / 7.0f, 1.5f);
-            for (int i = 0; i < len; ++i) { wtL[i] += rvL[i] * lv; wtR[i] += rvR[i] * lv; }
-        }
-
-        // ---- echo send ----
-        {
-            fx::FxParams fp;
-            const bool sync = pEcSync->load() > 0.5f;
-            fp.ecSync = sync ? (int) pEcDiv->load() + 1 : 0;
-            fp.ecTime = pEcTime->load();
-            fp.ecFb = pEcFb->load();
-            fp.ecDamp = 0.3f; fp.ecWidth = 0.8f; fp.ecPing = true; fp.ecMix = 1.0f; fp.bpm = bpm;
-            echo.process (ecL, ecR, len, fp);
-            const float el = pEcLevel->load();
-            // on / off with a 10 ms fade (the effects keep running, so switching on brings back a natural tail)
-            const float rvT = pRvOn->load() > 0.5f ? 1.0f : 0.0f, ecT = pEcOn->load() > 0.5f ? 1.0f : 0.0f;
-            const float step = 1.0f / (float) (0.01 * sr);
-            for (int i = 0; i < len; ++i)
-            {
-                rvGain += juce::jlimit (-step, step, rvT - rvGain);
-                ecGain += juce::jlimit (-step, step, ecT - ecGain);
-                mL[i] += wtL[i] * rvGain + ecL[i] * el * ecGain;
-                mR[i] += wtR[i] * rvGain + ecR[i] * el * ecGain;
+                fx::FxParams fp;
+                fp.ecSync = q.ecSync->load() > 0.5f ? (int) q.ecDiv->load() + 1 : 0;
+                fp.ecTime = q.ecTime->load(); fp.ecFb = q.ecFb->load();
+                fp.ecDamp = 0.3f; fp.ecWidth = 0.8f; fp.ecPing = true; fp.ecMix = 1.0f; fp.bpm = bpm;
+                echo[p].process (eL, eR, len, fp);
+                const float el = q.ecLevel->load();
+                for (int i = 0; i < len; ++i)
+                {
+                    ecGain[p] += juce::jlimit (-step, step, ecT - ecGain[p]);
+                    oL[i] += eL[i] * el * ecGain[p]; oR[i] += eR[i] * el * ecGain[p];
+                }
             }
         }
     }
 
-    // master on every enabled output
-    const float master = pMaster->load();
-    buffer.applyGain (master);
-    partials = active->activePartials();
+    buffer.applyGain (pMaster->load());
+    partials = munt.activePartials();
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +458,7 @@ void LaModuleProcessor::setStateInformation (const void* data, int sizeInBytes)
     {
         const juce::ScopedLock sl (getCallbackLock());
         if (memory.isNotEmpty() && ! mem.fromBase64 (memory)) mem.init (mem.rom);
+        mem.systemChanged = false;
         needResync = true;
     }
 }

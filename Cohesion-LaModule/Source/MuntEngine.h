@@ -209,6 +209,13 @@ public:
         for (auto& in : inst) munt::Lib::get().playSysexAt (in.ctx, fix.data(), (uint32_t) fix.size(), stamp (in, offset));
     }
 
+    // a SysEx for one part's instance only (per-part system settings such as the reverb)
+    void sysexTo (int part, const uint8_t* d, int len, int offset)
+    {
+        if (! opened || part < 0 || part >= mt::kParts) return;
+        munt::Lib::get().playSysexAt (inst[part].ctx, d, (uint32_t) len, stamp (inst[part], offset));
+    }
+
     void render (const PartBuffers& out, int n) override
     {
         const double ratio = 32000.0 / sr;

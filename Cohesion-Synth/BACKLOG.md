@@ -50,7 +50,9 @@
   multi-out (MAIN + OUT 2–10; Munt draait per partij als eigen instantie), MT-32-geheugen +
   SysEx, LOAD .SYX, systeemreverb (in sync met SysEx) + echo-send, mixer met mute/solo/dimmen,
   MIDI-kanaal per partij, ROM-sets gedeeld met de synth; offline getest (tests/ModuleTest.cpp).
-- [ ] LA MODULE vervolg: partial reserve per partij (eigen engine), Munt-ondersteuning voor
+- [x] LA MODULE: alleen nog de Munt-engine (eigen LA-engine eruit), LIBRARY leest ROM-map in,
+  reverb (per Munt-instantie) en echo per partij met aan/uit, NO ROM LOADED op het LCD.
+- [ ] LA MODULE vervolg: Munt-ondersteuning voor
   CM-32L "1.04"-set (Munt herkent die control-ROM niet), LCD-berichten (SysEx 20 00 00),
   library-venster in huisstijl i.p.v. popupmenu, opnemen in de installer.
 - [ ] (oorspronkelijke opdracht) Multi-timbrale MT-32-emulator op basis van de LA-engine: 8 melodische partijen +

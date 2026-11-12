@@ -80,7 +80,6 @@ struct TitleToggle : juce::Button
     {
         setClickingTogglesState (true);
         setMouseCursor (juce::MouseCursor::PointingHandCursor);
-        setTooltip ("Click to switch " + t.toLowerCase() + " on / off");
     }
     void paintButton (juce::Graphics& g, bool over, bool) override
     {
@@ -96,7 +95,7 @@ struct TitleToggle : juce::Button
 
 class LaModuleEditor;
 
-// One MT-32 part: MIDI channel, patch, fader, pan, sends, mute / solo, output.
+// One MT-32 part: MIDI channel, patch, fader, pan, mute / solo, output.
 struct PartStrip : juce::Component
 {
     PartStrip (LaModuleEditor& e, LaModuleProcessor& p, int index);
@@ -112,10 +111,11 @@ struct PartStrip : juce::Component
     juce::TextButton nameBtn;
     juce::Slider fader;
     std::unique_ptr<SliderAtt> faderAtt;
-    std::unique_ptr<Knob> pan, rev, ech;
+    std::unique_ptr<Knob> pan;
     juce::TextButton muteBtn { "M" }, soloBtn { "S" };
     std::unique_ptr<ButtonAtt> muteAtt, soloAtt;
-    bool selected = false, dimmed = false;
+    bool selected = false, dimmed = false, rvOn = true, ecOn = false;
+    juce::Rectangle<int> fxArea;
 };
 
 struct Lcd : juce::Component
@@ -146,7 +146,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    void selectPart (int p) { selected = p; refreshAll(); }
+    void selectPart (int p);
     int  selectedPart() const { return selected; }
     void showLibrary (int part);
 
@@ -154,8 +154,11 @@ private:
     void timerCallback() override;
     void paintCanvas (juce::Graphics&);
     void layout();
+    void layoutFx();
+    void bindFx();                  // attach the REVERB / ECHO boxes to the selected part
     void refreshAll();
     void refreshRomBox();
+    void readRomFolder();
 
     LaModuleProcessor& proc;
     ModuleLookAndFeel lnf;
@@ -163,26 +166,25 @@ private:
     Canvas canvas;
     bool sizeRestored = false;
     int selected = 0;
-    uint32_t lastVersion = 0;
 
-    juce::TextButton engineBtn[2];
+    juce::TextButton libraryBtn { "LIBRARY" };
     juce::ComboBox romBox;
     Led midiLed;
     std::unique_ptr<Knob> master;
 
     Lcd lcd;
     float partialFrac = 0.0f; int partialCount = 0;
-    juce::TextButton loadBtn { "LOAD .SYX" }, resetBtn { "RESET" }, panicBtn { "PANIC" }, libraryBtn { "LIBRARY" };
+    juce::TextButton loadBtn { "LOAD .SYX" }, resetBtn { "RESET" }, panicBtn { "PANIC" };
     juce::String status;
 
     std::unique_ptr<PartStrip> strips[mt::kParts];
 
-    juce::TextButton rvModeBtn[4];
-    std::unique_ptr<Knob> rvTime, rvLevel, ecDiv, ecTime, ecFb, ecLevel;
-    juce::TextButton ecSyncBtn { "SYNC" };
-    std::unique_ptr<ButtonAtt> ecSyncAtt;
+    // REVERB / ECHO of the selected part
     TitleToggle rvOnBtn { "REVERB" }, ecOnBtn { "ECHO" };
-    std::unique_ptr<ButtonAtt> rvOnAtt, ecOnAtt;
+    juce::TextButton rvModeBtn[4];
+    juce::TextButton ecSyncBtn { "SYNC" };
+    std::unique_ptr<ButtonAtt> rvOnAtt, ecOnAtt, ecSyncAtt;
+    std::unique_ptr<Knob> rvTime, rvLevel, ecDiv, ecTime, ecFb, ecLevel;
 
     std::unique_ptr<juce::FileChooser> chooser;
 
