@@ -4,14 +4,14 @@
 ;
 ;  Custom wizard: full-height COHESION-banner links op elke pagina.
 ;  Keuzes in de wizard:
-;   - welke plugin(s): Glue / EQ-Comp / ADT / Transient / Synth / LA Module (los of alle)
+;   - welke plugin(s): Glue / EQ-Comp / ADT / Transient / Synth / LA Module / LA Font (los of alle)
 ;   - optioneel de standalone app COHESION SysEx (DX7 bank builder)
 ;   - installatiemap: standaard de VST3-map (C:\Program Files\Common Files\VST3)
 ; ===========================================================================
 
 #define AppName        "COHESION"
 #define AppPublisher   "Pepperwood"
-#define AppVersion     "1.2.4"
+#define AppVersion     "1.3.0"
 
 ; Absolute bronpaden naar de gebouwde VST3-bundels (Release)
 #define GlueSrc      "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Glue\build\Cohesion_artefacts\Release\VST3\Cohesion Glue.vst3"
@@ -21,6 +21,8 @@
 #define SynthSrc     "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Synth\build\CohesionSynth_artefacts\Release\VST3\Cohesion Synth.vst3"
 ; LA Module bundle incl. mt32emu.dll (Munt, LGPL) + its licence text
 #define LaModuleSrc  "E:\OneDrive\Projectbestanden\COHESION\Cohesion-LaModule\build\CohesionLaModule_artefacts\Release\VST3\Cohesion LA Module.vst3"
+; LA Font bundle incl. libfluidsynth-3.dll (FluidSynth, LGPL) + its licence text
+#define LaFontSrc    "E:\OneDrive\Projectbestanden\COHESION\Cohesion-LaFont\build\CohesionLaFont_artefacts\Release\VST3\Cohesion LA Font.vst3"
 #define SysExExe     "E:\OneDrive\Projectbestanden\COHESION\Cohesion-SysEx\build\CohesionSysEx_artefacts\Release\Cohesion SysEx.exe"
 
 [Setup]
@@ -68,6 +70,7 @@ Name: "eqcomp";    Description: "Cohesion EQ-Comp (VST3)";   Types: full custom
 Name: "adt";       Description: "Cohesion ADT (VST3)";       Types: full custom
 Name: "transient"; Description: "Cohesion Transient (VST3)"; Types: full custom
 Name: "synth";     Description: "Cohesion Synth (VST3 instrument)"; Types: full custom
+Name: "lafont";    Description: "Cohesion LA Font - SoundFont player (VST3 instrument, met FluidSynth)"; Types: full custom
 Name: "lamodule";  Description: "Cohesion LA Module - MT-32 emulator (VST3 instrument, met Munt)"; Types: full custom
 Name: "sysex";     Description: "COHESION SysEx - DX7 bank builder (app)"; Types: full custom
 
@@ -78,6 +81,7 @@ Source: "{#EqCompSrc}\*";    DestDir: "{app}\Cohesion EQ-Comp.vst3";   Component
 Source: "{#AdtSrc}\*";       DestDir: "{app}\Cohesion ADT.vst3";       Components: adt;       Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#TransientSrc}\*"; DestDir: "{app}\Cohesion Transient.vst3"; Components: transient; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SynthSrc}\*";     DestDir: "{app}\Cohesion Synth.vst3";     Components: synth;     Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#LaFontSrc}\*";    DestDir: "{app}\Cohesion LA Font.vst3";   Components: lafont;    Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#LaModuleSrc}\*";  DestDir: "{app}\Cohesion LA Module.vst3"; Components: lamodule;  Flags: ignoreversion recursesubdirs createallsubdirs
 ; the standalone app goes to Program Files, independent of the chosen VST3 folder
 Source: "{#SysExExe}";        DestDir: "{commonpf64}\Pepperwood\COHESION SysEx"; Components: sysex; Flags: ignoreversion

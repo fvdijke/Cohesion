@@ -1,9 +1,9 @@
 # COHESION
 
 **COHESION** is a suite of original JUCE audio tools by **Pepperwood** — four VST3 effects,
-a VST3 synthesizer, an MT-32-compatible sound module and a standalone DX7 bank builder — sharing
-one dark/teal house style and a consistent workflow. All DSP is original code (the LA MODULE's
-sound engine is the separate, LGPL-licensed Munt library).
+a VST3 synthesizer, an MT-32-compatible sound module, a SoundFont player and a standalone DX7 bank builder — sharing
+one dark/teal house style and a consistent workflow. All DSP is original code (the sound engines of
+LA MODULE and LA FONT are the separate, LGPL-licensed Munt and FluidSynth libraries).
 
 | Plugin | What it does |
 |--------|--------------|
@@ -12,6 +12,7 @@ sound engine is the separate, LGPL-licensed Munt library).
 | **COHESION — ADT** | **Artificial Double Tracking** — the Abbey Road trick: a modulated, delayed double of a vocal to make it thicker and wider. |
 | **COHESION — TRANSIENT** | Four-control transient shaper (attack, sustain, sensitivity, output) — add punch or soften attacks. |
 | **COHESION — SYNTH** | Polyphonic hybrid synth: 4 VA oscillators + a DX7-compatible 6-operator FM engine, 2 filters, mod matrix, FX chain, arpeggiator, 1,101 presets and DX7 SysEx import. |
+| **COHESION — LA FONT** | SoundFont player (FluidSynth): 16 parts on their own MIDI channels, a SoundFont and preset per part, reverb and chorus per part, mixer and separate outputs. |
 | **COHESION — LA MODULE** | MT-32 emulator (Munt): 8 parts + rhythm on their own MIDI channels, MT-32 SysEx, reverb and echo per part, mixer and separate outputs. |
 | **COHESION — SYSEX** | Standalone app that builds new DX7 32-voice SysEx banks from voices picked out of a `.syx` collection. |
 
@@ -27,6 +28,14 @@ imported. See [Cohesion-Synth](Cohesion-Synth/README.md).
 
 <img src="Cohesion-Synth/screenshots/osc-mix.png" width="860" height="520" alt="COHESION - SYNTH · OSC / MIX">
 <img src="Cohesion-Synth/screenshots/fm.png" width="860" height="520" alt="COHESION - SYNTH · FM">
+
+### COHESION — LA FONT
+A multi-timbral SoundFont player for your own .sf2 files, built on FluidSynth (loaded as a
+separate LGPL DLL): 16 parts on their own MIDI channels, each with its own SoundFont, preset,
+reverb and chorus, a mixer (level, pan, mute / solo) and a separate stereo output per part; plays
+standard MIDI files like a GM / GS module. See [Cohesion-LaFont](Cohesion-LaFont/README.md).
+
+<img src="Cohesion-LaFont/screenshots/lafont.png" width="860" height="430" alt="COHESION - LA FONT">
 
 ### COHESION — LA MODULE
 An MT-32 / CM-32L emulator for your own Roland ROM dumps, built on Munt (loaded as a separate
@@ -82,6 +91,7 @@ COHESION/
 ├─ Cohesion-Transient/ # COHESION - TRANSIENT (VST3 "Cohesion Transient")
 ├─ Cohesion-Synth/     # COHESION - SYNTH     (VST3 instrument "Cohesion Synth")
 ├─ Cohesion-LaModule/  # COHESION - LA MODULE (VST3 instrument "Cohesion LA Module")
+├─ Cohesion-LaFont/    # COHESION - LA FONT   (VST3 instrument "Cohesion LA Font")
 ├─ Cohesion-SysEx/     # COHESION - SYSEX     (standalone DX7 bank builder, see its README)
 └─ installer/         # Inno Setup script for the combined Windows installer
 ```
@@ -111,4 +121,5 @@ installer from the [releases](../../releases/latest).
 ## License
 
 © Pepperwood. All rights reserved. The `mt32emu.dll` shipped with COHESION — LA MODULE
-is [Munt](https://github.com/munt/munt), licensed under the GNU LGPL 2.1 or later.
+is [Munt](https://github.com/munt/munt) and the `libfluidsynth-3.dll` shipped with COHESION — LA FONT is
+[FluidSynth](https://github.com/FluidSynth/fluidsynth), both licensed under the GNU LGPL 2.1 or later.
