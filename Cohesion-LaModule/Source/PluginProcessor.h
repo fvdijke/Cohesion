@@ -47,7 +47,9 @@ public:
     juce::StringArray romLabels() const;
     juce::String currentRomLabel() const { return romLabel; }
     bool setRom (const juce::String& label, bool keepMemory = false);
-    romlib::ImportResult importRoms (const juce::Array<juce::File>& items);
+    // adds ROM sets from files / folders / zips; sets Munt can't play are not kept (`rejected`)
+    struct RomImport { romlib::ImportResult r; juce::StringArray added, rejected; };
+    RomImport importRoms (const juce::Array<juce::File>& items, bool singleFiles = false);
     bool romSupported (const juce::String& label);        // Munt can play this set (cached)
     bool removeRom (const juce::String& label);            // deletes the stored copy of a set
     int  removeUnsupportedRoms();

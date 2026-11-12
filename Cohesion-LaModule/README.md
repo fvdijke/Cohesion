@@ -17,7 +17,9 @@ which gives each part its own output and its own reverb (each part has 32 partia
 
 ## Features
 
-- **ROM** menu: *Add ROMs from a folder* (the .zip files in it are scanned too), *Remove* the
+- **ROM** menu: *Add ROMs from a folder* (the .zip files in it are scanned too) or *Add ROM files*
+  (pick single files in Explorer; a lone control or PCM ROM is paired with the ROMs already
+  present). Every new set is tested with Munt and only added when it plays. *Remove* the
   current set or all sets Munt can't play (only the stored copy, never your originals) and *Show
   ROM folder*. The picker next to it chooses the set; sets Munt can't play are marked *not
   supported*. Sets are shared with COHESION — SYNTH

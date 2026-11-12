@@ -371,14 +371,45 @@ void LaModuleEditor::readRomFolder()
     {
         const auto items = fc.getResults();
         if (items.isEmpty()) return;
-        const auto r = proc.importRoms (items);
-        if (r.added.empty() && r.duplicates == 0) status = "No MT-32 / CM-32L control + PCM ROM pair found in that folder";
-        else status = "ROM sets added: " + juce::String ((int) r.added.size())
-                    + (r.duplicates > 0 ? "  |  " + juce::String (r.duplicates) + " already present" : juce::String());
-        if (! r.added.empty() && proc.currentRomLabel() != r.added.front()->label) proc.setRom (r.added.front()->label);
-        refreshRomBox();
-        refreshAll();
+        reportImport (proc.importRoms (items), false);
     });
+}
+
+void LaModuleEditor::readRomFiles()
+{
+    // Windows Explorer dialog; Ctrl / Shift-click selects several files
+    chooser = std::make_unique<juce::FileChooser> ("Choose MT-32 / CM-32L ROM files (control ROM, PCM ROM or a .zip)", juce::File(),
+                                                   "*.rom;*.ROM;*.bin;*.BIN;*.zip;*.ZIP;*", true);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+                              | juce::FileBrowserComponent::canSelectMultipleItems, [this] (const juce::FileChooser& fc)
+    {
+        const auto items = fc.getResults();
+        if (! items.isEmpty()) reportImport (proc.importRoms (items, true), true);
+    });
+}
+
+// One-line status plus a summary window with what each file was and what was added / rejected.
+void LaModuleEditor::reportImport (const LaModuleProcessor::RomImport& im, bool showDetails)
+{
+    const auto& r = im.r;
+    juce::StringArray lines;
+    if (! im.added.isEmpty())    lines.add ("Added (plays with Munt): " + im.added.joinIntoString (", "));
+    if (! im.rejected.isEmpty()) lines.add ("Not added, Munt can't play: " + im.rejected.joinIntoString (", "));
+    if (r.duplicates > 0)        lines.add (juce::String (r.duplicates) + " set(s) already present");
+    if (! r.failed.isEmpty())    lines.add ("Not added, no PCM ROM that Munt plays it with: " + r.failed.joinIntoString (", "));
+    if (lines.isEmpty())         lines.add ("No MT-32 / CM-32L control + PCM ROM pair found");
+    status = lines[0];
+    if (! im.added.isEmpty() && proc.currentRomLabel() != im.added[0]) proc.setRom (im.added[0]);
+    refreshRomBox();
+    refreshAll();
+    if (showDetails || ! im.rejected.isEmpty() || ! r.failed.isEmpty())
+    {
+        juce::String msg = r.files_.isEmpty() ? juce::String() : r.files_.joinIntoString ("\n") + "\n\n";
+        msg << lines.joinIntoString ("\n");
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions().withIconType (im.added.isEmpty() ? juce::MessageBoxIconType::WarningIcon
+                                                                                                   : juce::MessageBoxIconType::InfoIcon)
+                                          .withTitle ("Add ROMs").withMessage (msg).withButton ("OK").withAssociatedComponent (this), nullptr);
+    }
 }
 
 void LaModuleEditor::showRomMenu()
@@ -389,6 +420,7 @@ void LaModuleEditor::showRomMenu()
     juce::PopupMenu m;
     m.addSectionHeader ("ROM sets");
     m.addItem (1, "Add ROMs from a folder...");
+    m.addItem (5, "Add ROM files...");
     m.addSeparator();
     m.addItem (2, cur.isNotEmpty() ? "Remove \"" + cur + "\"" : juce::String ("Remove the current set"), cur.isNotEmpty());
     m.addItem (3, "Remove sets Munt can't play (" + juce::String (unsupported) + ")", unsupported > 0);
@@ -399,6 +431,7 @@ void LaModuleEditor::showRomMenu()
         const juce::String note = "This deletes the module's stored copy (also used by COHESION - SYNTH). "
                                   "Your original ROM files are not touched; you can add them again with Add ROMs.";
         if (r == 1) readRomFolder();
+        if (r == 5) readRomFiles();
         if (r == 2)
             confirmRemove ("Remove ROM set", "Remove \"" + cur + "\"?\n\n" + note, [this, cur]
             {

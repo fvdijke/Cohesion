@@ -57,11 +57,21 @@ namespace romlib
         return out;
     }
 
-    struct ImportResult { std::vector<std::shared_ptr<const la32::Rom>> added; int duplicates = 0, files = 0; juce::StringArray failed; };
+    struct ImportResult
+    {
+        std::vector<std::shared_ptr<const la32::Rom>> added;
+        int duplicates = 0, files = 0;
+        juce::StringArray failed;       // control ROMs without a matching PCM ROM
+        juce::StringArray files_;       // per chosen file: what it is ("name: control ROM", ...)
+    };
 
     // Scans files, folders (recursively) and .zip files for control + PCM ROM pairs and stores
     // new sets. `known` = content hashes that already exist (counted as duplicates).
-    inline ImportResult importRoms (const juce::Array<juce::File>& items, std::vector<uint64_t> known)
+    // With `pairWithLibrary`, a lone control ROM is tried with the PCM ROMs already stored in the
+    // library (and a lone PCM ROM with the stored control ROMs), so single files can be added.
+    // `accept` (optional) decides whether a control + PCM pair really works (e.g. a Munt test).
+    inline ImportResult importRoms (const juce::Array<juce::File>& items, std::vector<uint64_t> known, bool pairWithLibrary = false,
+                                    std::function<bool (const juce::MemoryBlock&, const juce::MemoryBlock&)> accept = nullptr)
     {
         ImportResult r;
         struct Blob { juce::String name, container; juce::MemoryBlock data; };
@@ -90,9 +100,22 @@ namespace romlib
         auto readFile = [&] (const juce::File& f)
         {
             ++r.files;
-            if (f.hasFileExtension ("zip")) { readZip (f); return; }
-            if (! romSize (f.getSize())) return;
-            juce::MemoryBlock mb; if (f.loadFileAsData (mb)) consider (f.getFileName(), f.getParentDirectory().getFullPathName(), std::move (mb));
+            if (f.hasFileExtension ("zip"))
+            {
+                const auto c0 = controls.size(), p0 = pcms.size();
+                readZip (f);
+                r.files_.add (f.getFileName() + ": zip with " + juce::String ((int) (controls.size() - c0)) + " control + "
+                              + juce::String ((int) (pcms.size() - p0)) + " PCM ROM(s)");
+                return;
+            }
+            const auto sz = f.getSize();
+            if (! romSize (sz)) { r.files_.add (f.getFileName() + ": not an MT-32 / CM-32L ROM (" + juce::String ((int) (sz / 1024)) + " KB)"); return; }
+            juce::MemoryBlock mb;
+            if (f.loadFileAsData (mb))
+            {
+                r.files_.add (f.getFileName() + (sz <= 131072 ? ": control ROM" : ": PCM ROM"));
+                consider (f.getFileName(), f.getParentDirectory().getFullPathName(), std::move (mb));
+            }
         };
         for (const auto& item : items)
         {
@@ -103,6 +126,23 @@ namespace romlib
                 for (auto& f : files) readFile (f);
             }
             else if (item.existsAsFile()) readFile (item);
+        }
+
+        // single files: complete the pair from the library
+        if (pairWithLibrary)
+        {
+            const bool lonePcm = controls.empty() && ! pcms.empty();
+            if (! controls.empty() || lonePcm)
+            {
+                auto sets = userRomDir().findChildFiles (juce::File::findDirectories, false);
+                sets.sort();
+                for (auto& d : sets)
+                {
+                    juce::MemoryBlock mb;
+                    if (lonePcm) { if (d.getChildFile ("control.rom").loadFileAsData (mb)) controls.push_back ({ "library " + d.getFileName(), "library", std::move (mb) }); }
+                    else         { if (d.getChildFile ("pcm.rom").loadFileAsData (mb))     pcms.push_back ({ "library " + d.getFileName(), "library", std::move (mb) }); }
+                }
+            }
         }
 
         const auto dir = userRomDir();
@@ -117,9 +157,11 @@ namespace romlib
             for (auto* p : order)
             {
                 juce::String err;
-                if ((rom = la32::load (c.data, p->data, c.name, err)) != nullptr) { pcmUsed = p; break; }
+                if ((rom = la32::load (c.data, p->data, c.name, err)) == nullptr) continue;
+                if (accept && ! accept (c.data, p->data)) { rom = nullptr; continue; }   // the engine must play the pair
+                pcmUsed = p; break;
             }
-            if (rom == nullptr) { r.failed.add (c.name); continue; }
+            if (rom == nullptr) { if (c.container != "library") r.failed.add (c.name); continue; }
             if (std::find (known.begin(), known.end(), rom->contentHash) != known.end()) { ++r.duplicates; continue; }
 
             // store the pair as <model version>/control.rom + pcm.rom

@@ -138,13 +138,24 @@ bool LaModuleProcessor::setRom (const juce::String& label, bool keepMemory)
     return true;
 }
 
-romlib::ImportResult LaModuleProcessor::importRoms (const juce::Array<juce::File>& items)
+LaModuleProcessor::RomImport LaModuleProcessor::importRoms (const juce::Array<juce::File>& items, bool singleFiles)
 {
+    RomImport out;
     std::vector<uint64_t> known;
     for (auto& r : romlib::storedSets()) known.push_back (r->contentHash);
-    auto res = romlib::importRoms (items, known);
-    if (mem.rom == nullptr && ! res.added.empty()) setRom (res.added.front()->label);
-    return res;
+    // Munt decides during pairing, so every control ROM ends up with a PCM ROM it really plays with
+    out.r = romlib::importRoms (items, known, singleFiles, MuntEngine::available()
+                                    ? std::function<bool (const juce::MemoryBlock&, const juce::MemoryBlock&)> (&MuntEngine::canOpenData)
+                                    : nullptr);
+    // check every new set with Munt: only sets that play are kept
+    for (auto& rom : out.r.added)
+    {
+        const auto label = rom->label;
+        if (romSupported (label)) out.added.add (label);
+        else { out.rejected.add (label); supportCache.erase (label); romlib::setDir (label).deleteRecursively(); }
+    }
+    if (mem.rom == nullptr && ! out.added.isEmpty()) setRom (out.added[0]);
+    return out;
 }
 
 bool LaModuleProcessor::romSupported (const juce::String& label)

@@ -132,7 +132,8 @@ struct HelpOverlay : juce::Component
         auto head = [&] (const char* t) { a.append (juce::String::fromUTF8 (t) + "\n", ui::font (15.0f, true), ui::teal); };
         auto body = [&] (const char* t) { a.append (juce::String::fromUTF8 (t) + "\n\n", ui::font (13.5f), ui::text); };
         head ("Getting started");
-        body ("1. Click ROM > Add ROMs from a folder and choose the folder with your MT-32 / CM-32L ROM files (control + PCM ROM; .zip files in the folder are scanned too). "
+        body ("1. Click ROM > Add ROMs from a folder (or Add ROM files to pick single files; a lone control or PCM ROM is paired with the ROMs already present). "
+              "Every new set is tested with Munt and only added when it plays. "
               "Choose the ROM set in the picker next to it. The ROM menu also removes sets (e.g. the ones marked \"not supported\") and shows the ROM folder.\n"
               "2. Parts 1\xe2\x80\x93" "8 listen on MIDI channels 2\xe2\x80\x93" "9, the rhythm part on channel 10 (change this per part with its CH picker).\n"
               "3. Click a part's name to choose a timbre. LOAD .SYX sends an MT-32 SysEx file, e.g. the setup of a game or song.");
@@ -225,6 +226,8 @@ private:
     void refreshRomBox();
     void readRomFolder();
     void showRomMenu();
+    void readRomFiles();
+    void reportImport (const LaModuleProcessor::RomImport& im, bool showDetails);
     void confirmRemove (const juce::String& title, const juce::String& message, std::function<void()> action);
     juce::StringArray romItems;                 // labels behind the ROM picker's items
 

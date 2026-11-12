@@ -164,7 +164,12 @@ public:
     static bool canOpen (const juce::File& controlRom, const juce::File& pcmRom)
     {
         juce::MemoryBlock c, p;
-        if (! available() || ! controlRom.loadFileAsData (c) || ! pcmRom.loadFileAsData (p)) return false;
+        if (! controlRom.loadFileAsData (c) || ! pcmRom.loadFileAsData (p)) return false;
+        return canOpenData (c, p);
+    }
+    static bool canOpenData (const juce::MemoryBlock& c, const juce::MemoryBlock& p)
+    {
+        if (! available()) return false;
         munt::Instance test;
         const bool ok = test.open (c, p);
         test.close();

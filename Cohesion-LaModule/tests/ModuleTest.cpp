@@ -116,7 +116,10 @@ int main (int argc, char** argv)
     check (p.currentRom() == nullptr && p.muntStatus().isNotEmpty(), "fresh library has no ROM set", p.muntStatus());
     snapshot (p, outDir, "0-no-rom");
     const auto imp = p.importRoms ({ romFolder });
-    check (! imp.added.empty() && p.currentRom() != nullptr, "ROM import selects a set", juce::String ((int) imp.added.size()) + " set(s)");
+    bool allPlay = ! p.romLabels().isEmpty();
+    for (auto& l : p.romLabels()) allPlay &= p.romSupported (l);
+    check (imp.added.size() >= 2 && allPlay && p.currentRom() != nullptr, "folder import keeps only sets Munt plays",
+           "added " + imp.added.joinIntoString (", ") + " | not playable " + juce::String (imp.r.failed.size() + imp.rejected.size()));
     const auto labels = p.romLabels();
     std::printf ("   sets: %s\n", labels.joinIntoString (", ").toRawUTF8());
     check (MuntEngine::available(), "mt32emu.dll loaded", MuntEngine::unavailableReason());
@@ -254,6 +257,30 @@ int main (int argc, char** argv)
                "remove the current set falls back to another", "removed " + cur + ", now " + p.currentRomLabel());
         p.importRoms ({ romFolder });                       // restore the library for the next checks
         check (p.romLabels().contains (cur), "a removed set can be added again", p.romLabels().joinIntoString (", "));
+    }
+
+    // single ROM files: control ROM alone fails without its PCM, control + PCM works,
+    // a control ROM alone pairs with a PCM ROM already in the library
+    {
+        // find the MT-32 files by name (the user's folder layout may change)
+        juce::File ctl, pcm, other;
+        for (auto& f : romFolder.findChildFiles (juce::File::findFiles, false, "*"))
+        {
+            const auto n = f.getFileName().toUpperCase();
+            if (n.startsWith ("MT32_CONTROL") && n.contains ("PATCHED")) other = f;
+            else if (n.startsWith ("MT32_CONTROL") && f.getSize() == 65536) ctl = f;
+            else if (n.startsWith ("MT32_PCM") && f.getSize() == 524288) pcm = f;
+        }
+        std::printf ("   files: %s + %s, other %s\n", ctl.getFileName().toRawUTF8(), pcm.getFileName().toRawUTF8(), other.getFileName().toRawUTF8());
+        for (auto& l : p.romLabels()) if (l.startsWith ("MT-32")) p.removeRom (l);   // no MT-32 PCM ROM left in the library
+        auto a = p.importRoms ({ ctl }, true);
+        check (a.added.isEmpty() && a.r.failed.size() == 1, "control ROM alone: no matching PCM in the library", a.r.files_.joinIntoString (" | "));
+        auto b = p.importRoms ({ ctl, pcm }, true);
+        check (b.added.contains ("MT-32 1.07"), "control + PCM files added and checked", b.added.joinIntoString (", "));
+        auto c = p.importRoms ({ other }, true);
+        check (c.added.size() + c.rejected.size() + (size_t) c.r.duplicates >= 1 && c.r.failed.isEmpty(),
+               "control ROM alone pairs with the library's PCM", "added " + c.added.joinIntoString (", ") + " | rejected " + c.rejected.joinIntoString (", ")
+               + " | dup " + juce::String (c.r.duplicates));
     }
 
     // RESET = power cycle: ROM set reloaded, every part back to its power-on timbre, still playing
