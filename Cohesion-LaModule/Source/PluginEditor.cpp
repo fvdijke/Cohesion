@@ -59,7 +59,9 @@ void PartStrip::resized()
     chBox.setBounds (r.removeFromTop (20).reduced (4, 0));
     r.removeFromTop (4);
     nameBtn.setBounds (r.removeFromTop (30));
-    r.removeFromTop (10);
+    r.removeFromTop (3);
+    partialsArea = r.removeFromTop (15);                       // "n / 32" (painted)
+    r.removeFromTop (6);
     auto out = r.removeFromBottom (20); outBox.setBounds (out.reduced (4, 0));
     r.removeFromBottom (5);
     auto ms = r.removeFromBottom (20);
@@ -79,6 +81,16 @@ void PartStrip::paint (juce::Graphics& g)
     auto r = getLocalBounds().reduced (6, 8);
     g.setColour (ui::teal); g.setFont (ui::font (14.0f, true));
     g.drawText (idx < 8 ? juce::String (idx + 1) : juce::String ("R"), r.removeFromTop (16).withTrimmedLeft (16), juce::Justification::centred);
+
+    // this part's partials, of its own 32 (orange close to the limit)
+    {
+        const auto col = partials >= 28 ? juce::Colour (0xfff0997b) : partials > 0 ? ui::teal : ui::label;
+        juce::AttributedString a;
+        a.append (juce::String (partials), ui::font (11.0f, true), col.withAlpha (dimmed ? 0.4f : 1.0f));
+        a.append (" / 32", ui::font (11.0f), ui::label.withAlpha (dimmed ? 0.4f : 1.0f));
+        a.setJustification (juce::Justification::centred);
+        a.draw (g, partialsArea.toFloat());
+    }
 
     // this part's reverb / echo state (edited in the boxes below when the part is selected)
     auto f = fxArea;
@@ -113,6 +125,7 @@ void PartStrip::refresh (bool sel)
     nameBtn.setButtonText (proc.partName (idx));
     rvOn = a.getRawParameterValue (lpid::part (idx, "rv_on"))->load() > 0.5f;
     ecOn = a.getRawParameterValue (lpid::part (idx, "ec_on"))->load() > 0.5f;
+    partials = proc.partPartials (idx);
     led.level = juce::jmax (led.level * 0.82f, proc.takePartActivity (idx));
     led.repaint();
     repaint();
@@ -300,12 +313,26 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
     // LCD panel
     panelBox (g, { 20.0f, 76.0f, 1000.0f, 74.0f });
     g.setColour (ui::label); g.setFont (ui::font (10.0f, true));
-    g.drawText ("PARTIALS", 474, 84, 100, 14, juce::Justification::centredLeft);
-    g.setColour (ui::text); g.setFont (ui::font (11.0f));
-    g.drawText (juce::String (partialCount) + " / 32", 668, 84, 100, 14, juce::Justification::centredRight);
-    auto bar = juce::Rectangle<float> (474.0f, 101.0f, 294.0f, 6.0f);
-    g.setColour (juce::Colour (0xff13181d)); g.fillRoundedRectangle (bar, 3.0f);
-    g.setColour (ui::teal.withAlpha (0.8f)); g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, partialFrac)), 3.0f);
+    g.drawText (juce::String::fromUTF8 ("PARTIALS \xc2\xb7 ALL PARTS"), 474, 84, 200, 14, juce::Justification::centredLeft);
+    g.setColour (partialCount > 0 ? ui::teal : ui::text); g.setFont (ui::font (12.0f, true));
+    g.drawText (juce::String (partialCount), 668, 83, 100, 16, juce::Justification::centredRight);
+    // bar: each part's share, scaled to 96 partials (three MT-32s' worth)
+    auto bar = juce::Rectangle<float> (474.0f, 102.0f, 294.0f, 7.0f);
+    g.setColour (juce::Colour (0xff13181d)); g.fillRoundedRectangle (bar, 3.5f);
+    {
+        juce::Graphics::ScopedSaveState ss (g);
+        juce::Path clip; clip.addRoundedRectangle (bar, 3.5f); g.reduceClipRegion (clip);
+        float x = bar.getX();
+        for (int p = 0; p < mt::kParts; ++p)
+        {
+            const float w = bar.getWidth() * partialShare[p] / 96.0f;
+            if (w <= 0.05f) continue;
+            g.setColour ((p & 1) ? juce::Colour (0xff2fd99a) : ui::teal);
+            g.fillRect (x, bar.getY(), juce::jmin (w, bar.getRight() - x), bar.getHeight());
+            x += w;
+            if (x >= bar.getRight()) break;
+        }
+    }
     g.setColour (ui::dim); g.setFont (ui::font (10.5f));
     g.drawFittedText (status, 790, 84, 222, 54, juce::Justification::centredLeft, 4);
 
@@ -397,6 +424,6 @@ void LaModuleEditor::timerCallback()
 {
     midiLed.level = juce::jmax (midiLed.level * 0.8f, proc.takeMidiActivity()); midiLed.repaint();
     partialCount = proc.activePartials();
-    partialFrac = partialFrac * 0.6f + 0.4f * (partialCount / 32.0f);
+    for (int p = 0; p < mt::kParts; ++p) partialShare[p] = partialShare[p] * 0.6f + 0.4f * (float) proc.partPartials (p);
     refreshAll();
 }

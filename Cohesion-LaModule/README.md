@@ -23,8 +23,10 @@ which gives each part its own output and its own reverb (each part has 32 partia
 - **Parts 1–8 + rhythm** on MIDI channels 2–9 and 10 by default; each part's channel is
   selectable (OFF / 1–16). Program changes, controllers and **MT-32 SysEx** (timbres, patches,
   rhythm setup, system area, reset) as on the hardware. **LOAD .SYX** sends a SysEx file.
-- **LCD** `CH | program | name` of the selected part, partial meter, RESET and PANIC. A click on
-  a part's name picks a timbre from group A / B.
+- **LCD** `CH | program | name` of the selected part, RESET and PANIC. A click on a part's name
+  picks a timbre from group A / B.
+- **Partials**: under each part name `n / 32` (the part's own Munt unit; orange near the limit),
+  and in the LCD row the total of all parts with a bar showing each part's share.
 - **Mixer** per part: level, pan, mute / solo (muted parts dim), output MAIN or the part's own
   stereo output (OUT 2–10, enable the extra outputs in the DAW).
 - **Reverb and echo per part**: the boxes at the bottom edit the selected part — MT-32 reverb

@@ -54,7 +54,8 @@ public:
 
     juce::String partName (int part) const { return mem.partName (part); }
     int partProgram (int part) const { return mem.program[juce::jlimit (0, 8, part)]; }
-    int activePartials() const { return partials.load(); }
+    int activePartials() const { return munt.isOpen() ? munt.activePartials() : 0; }              // all parts
+    int partPartials (int part) const { return munt.isOpen() ? munt.partPartials (part) : 0; }      // one part (of its own 32)
     float takePartActivity (int part) { return activity[part].exchange (0.0f); }
     float takeMidiActivity()          { return midiActivity.exchange (0.0f); }
 

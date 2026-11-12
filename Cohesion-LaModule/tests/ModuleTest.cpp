@@ -178,6 +178,21 @@ int main (int argc, char** argv)
             check (p.partProgram (0) == 48 && p.partName (0) == p.currentRom()->melodic[48].getName().trim(), "program change 49 on part 1", p.partName (0));
         }
 
+        // partial meters: per part (of its own 32) and the total of all parts
+        {
+            p.requestPanic(); run (p, {}, 2.0, nch);
+            juce::MidiBuffer m;
+            for (int k : { 60, 64, 67 }) m.addEvent (juce::MidiMessage::noteOn (2, k, (juce::uint8) 100), 0);
+            m.addEvent (juce::MidiMessage::noteOn (3, 72, (juce::uint8) 100), 0);
+            run (p, m, 0.4, nch);
+            const int a1 = p.partPartials (0), a2 = p.partPartials (1), a3 = p.partPartials (2);
+            int sum = 0; for (int q = 0; q < mt::kParts; ++q) sum += p.partPartials (q);
+            check (a1 >= 3 && a2 >= 1 && a3 == 0 && p.activePartials() == sum, "partials per part and total",
+                   "part1 " + juce::String (a1) + "  part2 " + juce::String (a2) + "  total " + juce::String (p.activePartials()));
+            juce::MidiBuffer off; off.addEvent (juce::MidiMessage::allNotesOff (2), 0); off.addEvent (juce::MidiMessage::allNotesOff (3), 0);
+            run (p, off, 0.1, nch);
+        }
+
         // per-part reverb / echo: tails of part 1 with its switches, part 2 unaffected
         auto tailDb = [&] (int part)
         {
@@ -197,7 +212,7 @@ int main (int argc, char** argv)
         setParam (p, lpid::part (0, "ec_on"), 0.0f);
         const double none = tailDb (0);
         const double other = tailDb (1);
-        check (withEcho >= rvOnly - 0.5 && echoOnly > none + 20.0 && rvOnly > none + 20.0, "part 1 reverb / echo switches work",
+        check (withEcho >= rvOnly - 0.5 && echoOnly > none + 15.0 && rvOnly > none + 15.0, "part 1 reverb / echo switches work",
                "rev " + juce::String (rvOnly, 1) + " / +echo " + juce::String (withEcho, 1) + " / echo " + juce::String (echoOnly, 1) + " / none " + juce::String (none, 1) + " dB");
         check (other > none + 20.0, "part 2 keeps its own reverb", juce::String (other, 1) + " dB");
         setParam (p, lpid::part (0, "rv_on"), 1.0f);

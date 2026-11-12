@@ -227,17 +227,22 @@ public:
         if (opened && (++meterTick & 7) == 0)
         {
             int c = 0; uint8_t st[64];
-            for (auto& in : inst)
+            for (int k = 0; k < mt::kParts; ++k)
             {
+                auto& in = inst[k];
                 const int np = (int) juce::jmin (256u, munt::Lib::get().partialCount (in.ctx));
                 munt::Lib::get().partialStates (in.ctx, st);
-                for (int i = 0; i < np; ++i) if ((st[i >> 2] >> ((i & 3) * 2)) & 3) ++c;
+                int pc = 0;
+                for (int i = 0; i < np; ++i) if ((st[i >> 2] >> ((i & 3) * 2)) & 3) ++pc;
+                partCount[k].store (pc, std::memory_order_relaxed);
+                c += pc;
             }
             active.store (c, std::memory_order_relaxed);
         }
     }
 
     int activePartials() const override { return active.load (std::memory_order_relaxed); }
+    int partPartials (int part) const { return part >= 0 && part < mt::kParts ? partCount[part].load (std::memory_order_relaxed) : 0; }
 
 private:
     static constexpr double kLatency = 128.0;   // Munt samples (4 ms): keeps event timing inside a block
@@ -246,6 +251,7 @@ private:
     double sr = 44100.0;
     int meterTick = 0;
     std::atomic<int> active { 0 };
+    std::atomic<int> partCount[mt::kParts] {};
 
     uint32_t stamp (const munt::Instance& in, int offset) const
     {

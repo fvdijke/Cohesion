@@ -177,6 +177,8 @@ struct PartStrip : juce::Component
     juce::TextButton muteBtn { "M" }, soloBtn { "S" };
     std::unique_ptr<ButtonAtt> muteAtt, soloAtt;
     bool selected = false, dimmed = false, rvOn = true, ecOn = false;
+    int partials = 0;
+    juce::Rectangle<int> partialsArea;
     juce::Rectangle<int> fxArea;
 };
 
@@ -238,7 +240,8 @@ private:
     HelpOverlay help;
 
     Lcd lcd;
-    float partialFrac = 0.0f; int partialCount = 0;
+    int partialCount = 0;
+    float partialShare[mt::kParts] {};          // smoothed per-part share of the bar
     juce::TextButton loadBtn { "LOAD .SYX" }, resetBtn { "RESET" }, panicBtn { "PANIC" };
     juce::String status;
 
