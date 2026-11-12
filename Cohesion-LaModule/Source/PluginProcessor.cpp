@@ -147,6 +147,46 @@ romlib::ImportResult LaModuleProcessor::importRoms (const juce::Array<juce::File
     return res;
 }
 
+bool LaModuleProcessor::romSupported (const juce::String& label)
+{
+    if (label == romLabel && munt.isOpen()) return true;
+    auto it = supportCache.find (label);
+    if (it != supportCache.end()) return it->second;
+    const auto dir = romlib::setDir (label);
+    const bool ok = MuntEngine::canOpen (dir.getChildFile ("control.rom"), dir.getChildFile ("pcm.rom"));
+    supportCache[label] = ok;
+    return ok;
+}
+
+// Removes the stored copy of a ROM set (in the ROM library folder, never the user's originals).
+bool LaModuleProcessor::removeRom (const juce::String& label)
+{
+    const auto dir = romlib::setDir (label);
+    if (label.isEmpty() || ! dir.isDirectory()) return false;
+    if (label == romLabel)
+    {
+        const juce::ScopedLock sl (getCallbackLock());
+        munt.allSoundOff();
+        munt.close();
+        mem.init (nullptr);
+        romLabel.clear();
+        ++mem.version;
+    }
+    supportCache.erase (label);
+    const bool ok = dir.deleteRecursively();
+    // fall back to the first set Munt can play
+    if (romLabel.isEmpty())
+        for (auto& l : romLabels()) if (romSupported (l)) { setRom (l); break; }
+    return ok;
+}
+
+int LaModuleProcessor::removeUnsupportedRoms()
+{
+    int n = 0;
+    for (auto& l : romLabels()) if (! romSupported (l) && removeRom (l)) ++n;
+    return n;
+}
+
 juce::String LaModuleProcessor::muntStatus() const
 {
     if (! MuntEngine::available()) return MuntEngine::unavailableReason();

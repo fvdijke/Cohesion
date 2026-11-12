@@ -238,6 +238,24 @@ int main (int argc, char** argv)
         }
     }
 
+    // ROM management: support detection, remove unsupported sets, remove the current set
+    {
+        juce::String sup;
+        int unsupported = 0;
+        for (auto& l : p.romLabels()) { const bool ok = p.romSupported (l); sup << l << (ok ? " ok, " : " NOT, "); if (! ok) ++unsupported; }
+        std::printf ("   support: %s\n", sup.toRawUTF8());
+        const int before = p.romLabels().size();
+        const int removed = p.removeUnsupportedRoms();
+        check (removed == unsupported && p.romLabels().size() == before - removed, "remove sets Munt can't play", juce::String (removed) + " removed");
+        const auto cur = p.currentRomLabel();
+        p.removeRom (cur);
+        bool allOk = true; for (auto& l : p.romLabels()) allOk &= p.romSupported (l);
+        check (! p.romLabels().contains (cur) && p.currentRomLabel().isNotEmpty() && p.muntReady() && allOk,
+               "remove the current set falls back to another", "removed " + cur + ", now " + p.currentRomLabel());
+        p.importRoms ({ romFolder });                       // restore the library for the next checks
+        check (p.romLabels().contains (cur), "a removed set can be added again", p.romLabels().joinIntoString (", "));
+    }
+
     // RESET = power cycle: ROM set reloaded, every part back to its power-on timbre, still playing
     {
         p.setRom (labels[labels.size() - 1]);

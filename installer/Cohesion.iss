@@ -11,7 +11,7 @@
 
 #define AppName        "COHESION"
 #define AppPublisher   "Pepperwood"
-#define AppVersion     "1.2.2"
+#define AppVersion     "1.2.3"
 
 ; Absolute bronpaden naar de gebouwde VST3-bundels (Release)
 #define GlueSrc      "E:\OneDrive\Projectbestanden\COHESION\Cohesion-Glue\build\Cohesion_artefacts\Release\VST3\Cohesion Glue.vst3"

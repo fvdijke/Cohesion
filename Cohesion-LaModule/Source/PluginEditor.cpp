@@ -143,12 +143,13 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
 
     // --- header: ROM (read ROMs from a folder) + ROM set picker ---
     styleButton (romBtn, true);
-    romBtn.setTooltip ("Read MT-32 / CM-32L ROMs from a folder (.zip files inside are scanned too)");
-    romBtn.onClick = [this] { readRomFolder(); };
+    romBtn.setTooltip ("Add or remove MT-32 / CM-32L ROM sets");
+    romBtn.onClick = [this] { showRomMenu(); };
     canvas.addAndMakeVisible (romBtn);
     romBox.onChange = [this]
     {
-        const auto label = romBox.getText();
+        const int i = romBox.getSelectedId() - 1;
+        const auto label = juce::isPositiveAndBelow (i, romItems.size()) ? romItems[i] : juce::String();
         if (label.isNotEmpty() && label != proc.currentRomLabel()) { proc.setRom (label); status.clear(); refreshAll(); }
     };
     canvas.addAndMakeVisible (romBox);
@@ -354,8 +355,10 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
 void LaModuleEditor::refreshRomBox()
 {
     romBox.clear (juce::dontSendNotification);
-    const auto labels = proc.romLabels();
-    for (int i = 0; i < labels.size(); ++i) romBox.addItem (labels[i], i + 1);
+    romItems = proc.romLabels();
+    const auto& labels = romItems;
+    for (int i = 0; i < labels.size(); ++i)
+        romBox.addItem (labels[i] + (proc.romSupported (labels[i]) ? juce::String() : juce::String ("  (not supported)")), i + 1);
     const int cur = labels.indexOf (proc.currentRomLabel());
     if (cur >= 0) romBox.setSelectedId (cur + 1, juce::dontSendNotification);
     else romBox.setText ("No ROM set", juce::dontSendNotification);
@@ -376,6 +379,50 @@ void LaModuleEditor::readRomFolder()
         refreshRomBox();
         refreshAll();
     });
+}
+
+void LaModuleEditor::showRomMenu()
+{
+    const auto cur = proc.currentRomLabel();
+    int unsupported = 0;
+    for (auto& l : proc.romLabels()) if (! proc.romSupported (l)) ++unsupported;
+    juce::PopupMenu m;
+    m.addSectionHeader ("ROM sets");
+    m.addItem (1, "Add ROMs from a folder...");
+    m.addSeparator();
+    m.addItem (2, cur.isNotEmpty() ? "Remove \"" + cur + "\"" : juce::String ("Remove the current set"), cur.isNotEmpty());
+    m.addItem (3, "Remove sets Munt can't play (" + juce::String (unsupported) + ")", unsupported > 0);
+    m.addSeparator();
+    m.addItem (4, "Show ROM folder");
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&romBtn), [this, cur, unsupported] (int r)
+    {
+        const juce::String note = "This deletes the module's stored copy (also used by COHESION - SYNTH). "
+                                  "Your original ROM files are not touched; you can add them again with Add ROMs.";
+        if (r == 1) readRomFolder();
+        if (r == 2)
+            confirmRemove ("Remove ROM set", "Remove \"" + cur + "\"?\n\n" + note, [this, cur]
+            {
+                proc.removeRom (cur);
+                status = "Removed " + cur;
+                refreshRomBox(); refreshAll();
+            });
+        if (r == 3)
+            confirmRemove ("Remove ROM sets", "Remove " + juce::String (unsupported) + " ROM set(s) that Munt can't play?\n\n" + note, [this]
+            {
+                const int n = proc.removeUnsupportedRoms();
+                status = "Removed " + juce::String (n) + " unsupported set(s)";
+                refreshRomBox(); refreshAll();
+            });
+        if (r == 4) { auto d = romlib::userRomDir(); d.createDirectory(); d.startAsProcess(); }
+    });
+}
+
+void LaModuleEditor::confirmRemove (const juce::String& title, const juce::String& message, std::function<void()> action)
+{
+    auto opts = juce::MessageBoxOptions().withIconType (juce::MessageBoxIconType::WarningIcon)
+                    .withTitle (title).withMessage (message).withButton ("Remove").withButton ("Cancel")
+                    .withAssociatedComponent (this);
+    juce::AlertWindow::showAsync (opts, [action] (int result) { if (result == 1 && action) action(); });
 }
 
 void LaModuleEditor::showLibrary (int part)

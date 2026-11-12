@@ -17,8 +17,10 @@ which gives each part its own output and its own reverb (each part has 32 partia
 
 ## Features
 
-- **ROM** reads your ROMs from a folder (the .zip files in it are scanned too); the picker
-  next to it chooses the ROM set. Sets are shared with COHESION — SYNTH
+- **ROM** menu: *Add ROMs from a folder* (the .zip files in it are scanned too), *Remove* the
+  current set or all sets Munt can't play (only the stored copy, never your originals) and *Show
+  ROM folder*. The picker next to it chooses the set; sets Munt can't play are marked *not
+  supported*. Sets are shared with COHESION — SYNTH
   (`%APPDATA%\Pepperwood\Cohesion Synth\ROMs`). Without a set the LCD says NO ROM LOADED.
 - **Parts 1–8 + rhythm** on MIDI channels 2–9 and 10 by default; each part's channel is
   selectable (OFF / 1–16). Program changes, controllers and **MT-32 SysEx** (timbres, patches,

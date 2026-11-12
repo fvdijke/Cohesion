@@ -48,6 +48,9 @@ public:
     juce::String currentRomLabel() const { return romLabel; }
     bool setRom (const juce::String& label, bool keepMemory = false);
     romlib::ImportResult importRoms (const juce::Array<juce::File>& items);
+    bool romSupported (const juce::String& label);        // Munt can play this set (cached)
+    bool removeRom (const juce::String& label);            // deletes the stored copy of a set
+    int  removeUnsupportedRoms();
     std::shared_ptr<const la32::Rom> currentRom() const { return mem.rom; }
     bool muntReady() const { return munt.isOpen(); }
     juce::String muntStatus() const;
@@ -88,6 +91,7 @@ private:
     MuntEngine munt;
     bool needResync = false;
     juce::String romLabel;
+    std::map<juce::String, bool> supportCache;
 
     fx::Echo echo[mt::kParts];
     double sr = 44100.0;

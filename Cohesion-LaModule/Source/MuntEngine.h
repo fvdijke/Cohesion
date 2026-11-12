@@ -160,6 +160,17 @@ public:
     static bool available() { return munt::Lib::get().ok; }
     static juce::String unavailableReason() { return munt::Lib::get().error; }
 
+    // can Munt play this control + PCM ROM pair? (opens one test unit)
+    static bool canOpen (const juce::File& controlRom, const juce::File& pcmRom)
+    {
+        juce::MemoryBlock c, p;
+        if (! available() || ! controlRom.loadFileAsData (c) || ! pcmRom.loadFileAsData (p)) return false;
+        munt::Instance test;
+        const bool ok = test.open (c, p);
+        test.close();
+        return ok;
+    }
+
     bool fxIsReverbWet() const override { return true; }
     bool isOpen() const { return opened; }
 
