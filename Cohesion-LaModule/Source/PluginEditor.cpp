@@ -142,6 +142,10 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
     canvas.addAndMakeVisible (midiLed);
     master = std::make_unique<Knob> (a, lpid::master, "MASTER", false);
     canvas.addAndMakeVisible (*master);
+    helpBtn.onClick = [this] { help.setVisible (true); help.toFront (false); };
+    help.onClose = [this] { help.setVisible (false); };
+    canvas.addAndMakeVisible (helpBtn);
+    canvas.addChildComponent (help);
 
     // --- LCD row ---
     canvas.addAndMakeVisible (lcd);
@@ -241,8 +245,10 @@ void LaModuleEditor::layout()
     // header
     libraryBtn.setBounds (300, 25, 96, 26);
     romBox.setBounds (404, 27, 170, 22);
-    midiLed.setBounds (884, 26, 16, 22);
-    master->setBounds (962, 12, 52, 48);
+    midiLed.setBounds (850, 26, 16, 22);
+    master->setBounds (926, 12, 52, 48);
+    helpBtn.setBounds (996, 22, 24, 24);
+    help.setBounds (0, 0, kW, kH);
 
     // LCD row (y 76..148)
     lcd.setBounds (30, 88, 420, 48);
@@ -287,7 +293,7 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
     const int subX = 22 + juce::roundToInt (titleFont.getStringWidthFloat ("COHESION - "));
     g.drawText ("MT32 Emulator", subX, 47, 160, 16, juce::Justification::centredLeft);
     g.setColour (ui::label); g.setFont (ui::font (10.0f, true));
-    g.drawText ("MIDI", 840, 26, 40, 22, juce::Justification::centredRight);
+    g.drawText ("MIDI", 806, 26, 40, 22, juce::Justification::centredRight);
 
     // LCD panel
     panelBox (g, { 20.0f, 76.0f, 1000.0f, 74.0f });

@@ -93,6 +93,68 @@ struct TitleToggle : juce::Button
     }
 };
 
+// Round (?) button in the top-right corner.
+struct HelpButton : juce::Button
+{
+    HelpButton() : juce::Button ("?") { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip ("Help, credits and disclaimer"); }
+    void paintButton (juce::Graphics& g, bool over, bool down) override
+    {
+        auto r = getLocalBounds().toFloat().reduced (1.0f);
+        g.setColour (down ? ui::tealDark : ui::boxBg); g.fillEllipse (r);
+        g.setColour (ui::teal.withAlpha (over ? 0.9f : 0.5f)); g.drawEllipse (r, 1.2f);
+        g.setColour (over ? ui::teal : ui::text); g.setFont (ui::font (13.0f, true));
+        g.drawText ("?", r, juce::Justification::centred);
+    }
+};
+
+// Help / credits / disclaimer, drawn over the whole canvas; click anywhere to close.
+struct HelpOverlay : juce::Component
+{
+    std::function<void()> onClose;
+    void mouseDown (const juce::MouseEvent&) override { if (onClose) onClose(); }
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (juce::Colours::black.withAlpha (0.6f));
+        auto panelR = getLocalBounds().toFloat().withSizeKeepingCentre (760.0f, 500.0f);
+        g.setColour (ui::panel); g.fillRoundedRectangle (panelR, 10.0f);
+        g.setColour (ui::teal.withAlpha (0.45f)); g.drawRoundedRectangle (panelR.reduced (0.5f), 10.0f, 1.0f);
+
+        auto r = panelR.reduced (30.0f, 22.0f);
+        g.setColour (juce::Colours::white); g.setFont (ui::font (17.0f, true).withExtraKerningFactor (0.12f));
+        g.drawText ("COHESION - LA MODULE", r.removeFromTop (26.0f), juce::Justification::centredLeft);
+        g.setColour (juce::Colours::white.withAlpha (0.55f)); g.setFont (ui::font (11.0f));
+        g.drawText (juce::String::fromUTF8 ("MT32 Emulator  \xc2\xb7  by Pepperwood  \xc2\xb7  click anywhere to close"), r.removeFromTop (18.0f), juce::Justification::centredLeft);
+        r.removeFromTop (10.0f);
+
+        juce::AttributedString a;
+        a.setWordWrap (juce::AttributedString::byWord);
+        a.setLineSpacing (2.0f);
+        auto head = [&] (const char* t) { a.append (juce::String::fromUTF8 (t) + "\n", ui::font (15.0f, true), ui::teal); };
+        auto body = [&] (const char* t) { a.append (juce::String::fromUTF8 (t) + "\n\n", ui::font (13.5f), ui::text); };
+        head ("Getting started");
+        body ("1. Click LIBRARY and choose the folder with your MT-32 / CM-32L ROM files (control + PCM ROM; .zip files in the folder are scanned too). "
+              "Choose the ROM set in the picker next to it.\n"
+              "2. Parts 1\xe2\x80\x93" "8 listen on MIDI channels 2\xe2\x80\x93" "9, the rhythm part on channel 10 (change this per part with its CH picker).\n"
+              "3. Click a part's name to choose a timbre. LOAD .SYX sends an MT-32 SysEx file, e.g. the setup of a game or song.");
+        head ("Parts, reverb and echo");
+        body ("Each strip has a fader, pan, mute / solo and an output: MAIN or the part's own output (OUT 2\xe2\x80\x93" "10; enable the extra outputs in your DAW). "
+              "Click a strip to select it: the LCD and the REVERB / ECHO boxes then show that part. Reverb and echo are set per part; "
+              "click a box's title to switch it on or off. An MT-32 reverb SysEx sets the reverb of every part. "
+              "RESET restores the MT-32 power-on state, PANIC stops all notes.");
+        head ("Credits");
+        body ("Sound engine: Munt / mt32emu \xc2\xa9 the Munt contributors, licensed under the GNU Lesser General Public License 2.1 or later "
+              "(github.com/munt/munt). It is not part of this plugin's code: it is included as the separate library mt32emu.dll next to the plugin, "
+              "with its licence text (mt32emu-COPYING.LESSER.txt), and may be replaced by your own build of Munt.\n"
+              "Built with JUCE.  COHESION - LA MODULE \xc2\xa9 Pepperwood. All rights reserved.");
+        head ("Disclaimer");
+        body ("Roland, MT-32, CM-32L and LA synthesis are trademarks or registered trademarks of Roland Corporation. "
+              "This product is not affiliated with, endorsed or sponsored by Roland Corporation; these names are only used to describe compatibility. "
+              "No Roland ROM data is included: the module plays ROM images that you provide yourself and are entitled to use. "
+              "This software is provided \"as is\", without any warranty.");
+        a.draw (g, r);
+    }
+};
+
 class LaModuleEditor;
 
 // One MT-32 part: MIDI channel, patch, fader, pan, mute / solo, output.
@@ -149,6 +211,7 @@ public:
     void selectPart (int p);
     int  selectedPart() const { return selected; }
     void showLibrary (int part);
+    void showHelp() { help.setVisible (true); help.toFront (false); }
 
 private:
     void timerCallback() override;
@@ -171,6 +234,8 @@ private:
     juce::ComboBox romBox;
     Led midiLed;
     std::unique_ptr<Knob> master;
+    HelpButton helpBtn;
+    HelpOverlay help;
 
     Lcd lcd;
     float partialFrac = 0.0f; int partialCount = 0;

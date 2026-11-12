@@ -87,10 +87,10 @@ static juce::MidiBuffer song()
     return m;
 }
 
-static void snapshot (LaModuleProcessor& p, const juce::File& outDir, const char* name, int part = 0, int w = 0, int h = 0)
+static void snapshot (LaModuleProcessor& p, const juce::File& outDir, const char* name, int part = 0, int w = 0, int h = 0, bool help = false)
 {
     std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
-    if (auto* e = dynamic_cast<LaModuleEditor*> (ed.get())) e->selectPart (part);
+    if (auto* e = dynamic_cast<LaModuleEditor*> (ed.get())) { e->selectPart (part); if (help) e->showHelp(); }
     if (w > 0) ed->setSize (w, h);
     juce::MessageManager::getInstance()->runDispatchLoopUntil (150);
     auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
@@ -248,6 +248,7 @@ int main (int argc, char** argv)
         run (p, m, 0.1, nch);
         snapshot (p, outDir, "1-module", 1);
         snapshot (p, outDir, "2-scaled-70", 4, 728, 462);
+        snapshot (p, outDir, "3-help", 0, 1040, 660, true);
     }
     tmp.deleteRecursively();
     std::printf ("\n%s (%d failures)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures);

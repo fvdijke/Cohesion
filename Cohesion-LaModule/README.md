@@ -31,6 +31,7 @@ which gives each part its own output and its own reverb (each part has 32 partia
   (Room / Hall / Plate / Tap Delay, time, level) and a tempo-synced echo, each with an on / off
   switch in its title. An MT-32 system-reverb SysEx sets the reverb of every part. A part's
   reverb and echo go to the same output as the part.
+- **(?)** top right: short manual, credits (Munt / LGPL, JUCE) and the trademark disclaimer.
 - Resizable (60–200 %); size and the full MT-32 memory are saved with the project.
 
 ## Build
