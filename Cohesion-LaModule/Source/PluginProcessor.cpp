@@ -31,7 +31,7 @@ LaModuleProcessor::LaModuleProcessor()
     }
     pMaster = apvts.getRawParameterValue (lpid::master);
 
-    const auto sets = romlib::storedSets();
+    const auto sets = romlib::storedSets (false);
     if (! sets.empty()) setRom (sets.front()->label);
     startTimerHz (20);
 }
@@ -116,14 +116,14 @@ void LaModuleProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 juce::StringArray LaModuleProcessor::romLabels() const
 {
     juce::StringArray s;
-    for (auto& r : romlib::storedSets()) s.add (r->label);
+    for (auto& r : romlib::storedSets (false)) s.add (r->label);
     return s;
 }
 
 bool LaModuleProcessor::setRom (const juce::String& label, bool keepMemory)
 {
     std::shared_ptr<const la32::Rom> rom;
-    for (auto& r : romlib::storedSets()) if (r->label == label) rom = r;
+    for (auto& r : romlib::storedSets (false)) if (r->label == label) rom = r;
     if (rom == nullptr) return false;
     const auto dir = romlib::setDir (label);
     const juce::ScopedLock sl (getCallbackLock());
@@ -141,12 +141,19 @@ bool LaModuleProcessor::setRom (const juce::String& label, bool keepMemory)
 LaModuleProcessor::RomImport LaModuleProcessor::importRoms (const juce::Array<juce::File>& items, bool singleFiles)
 {
     RomImport out;
+    // every firmware version is its own set: duplicates are identical files only
     std::vector<uint64_t> known;
-    for (auto& r : romlib::storedSets()) known.push_back (r->contentHash);
-    // Munt decides during pairing, so every control ROM ends up with a PCM ROM it really plays with
-    out.r = romlib::importRoms (items, known, singleFiles, MuntEngine::available()
-                                    ? std::function<bool (const juce::MemoryBlock&, const juce::MemoryBlock&)> (&MuntEngine::canOpenData)
-                                    : nullptr);
+    for (auto& r : romlib::storedSets (false)) known.push_back (romlib::storedFileHash (r->label));
+    romlib::ImportOptions opt;
+    opt.pairWithLibrary = singleFiles;
+    opt.exactFiles = true;
+    if (MuntEngine::available())
+    {
+        // Munt decides during pairing (each control ROM gets a PCM ROM it really plays with) and names the set
+        opt.accept = &MuntEngine::canOpenData;
+        opt.name = &MuntEngine::controlName;
+    }
+    out.r = romlib::importRoms (items, known, opt);
     // check every new set with Munt: only sets that play are kept
     for (auto& rom : out.r.added)
     {

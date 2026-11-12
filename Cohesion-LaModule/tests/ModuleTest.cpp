@@ -363,6 +363,21 @@ int main (int argc, char** argv)
                + " | dup " + juce::String (c.r.duplicates));
     }
 
+    // a folder of sorted sets (e.g. made with --export): every firmware version is its own set, named by Munt
+    {
+        const auto sorted = romFolder.getParentDirectory().getChildFile ("La Module ROMS");
+        if (sorted.isDirectory())
+        {
+            for (auto& l : p.romLabels()) p.removeRom (l);
+            const auto im = p.importRoms ({ sorted });
+            std::printf ("   sets: %s\n", p.romLabels().joinIntoString (", ").toRawUTF8());
+            bool named = true; for (auto& l : p.romLabels()) named &= l.containsAnyOf ("0123456789") || l.containsIgnoreCase ("Blue");
+            check (im.added.size() == 11 && p.romLabels().size() == 11 && named, "La Module ROMS: 11 sets, each with its version",
+                   juce::String (im.added.size()) + " added");
+            p.importRoms ({ romFolder });
+        }
+    }
+
     // RESET = power cycle: ROM set reloaded, every part back to its power-on timbre, still playing
     {
         p.setRom (labels[labels.size() - 1]);

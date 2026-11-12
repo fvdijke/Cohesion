@@ -40,8 +40,9 @@ namespace romlib
 
     inline juce::File setDir (const juce::String& label) { return userRomDir().getChildFile (label); }
 
-    // all stored sets, sorted by folder name, duplicates (same sound) skipped
-    inline std::vector<std::shared_ptr<const la32::Rom>> storedSets()
+    // all stored sets, sorted by folder name; with `sameSoundIsDuplicate` firmware versions with an
+    // identical sound are listed once (synth library), otherwise every stored set is listed
+    inline std::vector<std::shared_ptr<const la32::Rom>> storedSets (bool sameSoundIsDuplicate = true)
     {
         std::vector<std::shared_ptr<const la32::Rom>> out;
         const auto dir = userRomDir();
@@ -51,11 +52,34 @@ namespace romlib
         for (auto& d : sets)
             if (auto rom = loadSetCached (d))
             {
-                bool dup = false; for (auto& s : out) if (s->contentHash == rom->contentHash) dup = true;
+                bool dup = false;
+                if (sameSoundIsDuplicate) for (auto& s : out) if (s->contentHash == rom->contentHash) dup = true;
                 if (! dup) out.push_back (rom);
             }
         return out;
     }
+
+    // identity of the exact files of a set (control + PCM bytes)
+    inline uint64_t fileHash (const juce::MemoryBlock& control, const juce::MemoryBlock& pcm)
+    {
+        const auto h = la32::fnv1a (static_cast<const uint8_t*> (pcm.getData()), pcm.getSize());
+        return la32::fnv1a (static_cast<const uint8_t*> (control.getData()), control.getSize(), h);
+    }
+    inline uint64_t storedFileHash (const juce::String& label)
+    {
+        juce::MemoryBlock c, p;
+        const auto d = setDir (label);
+        if (! d.getChildFile ("control.rom").loadFileAsData (c) || ! d.getChildFile ("pcm.rom").loadFileAsData (p)) return 0;
+        return fileHash (c, p);
+    }
+
+    struct ImportOptions
+    {
+        bool pairWithLibrary = false;   // complete a lone control / PCM ROM from the library
+        bool exactFiles = false;        // duplicates = identical files (keep every firmware version)
+        std::function<bool (const juce::MemoryBlock&, const juce::MemoryBlock&)> accept;   // does the pair really play?
+        std::function<juce::String (const juce::MemoryBlock&)> name;                        // label for a control ROM
+    };
 
     struct ImportResult
     {
@@ -70,9 +94,10 @@ namespace romlib
     // With `pairWithLibrary`, a lone control ROM is tried with the PCM ROMs already stored in the
     // library (and a lone PCM ROM with the stored control ROMs), so single files can be added.
     // `accept` (optional) decides whether a control + PCM pair really works (e.g. a Munt test).
-    inline ImportResult importRoms (const juce::Array<juce::File>& items, std::vector<uint64_t> known, bool pairWithLibrary = false,
-                                    std::function<bool (const juce::MemoryBlock&, const juce::MemoryBlock&)> accept = nullptr)
+    inline ImportResult importRoms (const juce::Array<juce::File>& items, std::vector<uint64_t> known, const ImportOptions& opt)
     {
+        const bool pairWithLibrary = opt.pairWithLibrary;
+        const auto& accept = opt.accept;
         ImportResult r;
         struct Blob { juce::String name, container; juce::MemoryBlock data; };
         std::vector<Blob> controls, pcms;
@@ -162,17 +187,25 @@ namespace romlib
                 pcmUsed = p; break;
             }
             if (rom == nullptr) { if (c.container != "library") r.failed.add (c.name); continue; }
-            if (std::find (known.begin(), known.end(), rom->contentHash) != known.end()) { ++r.duplicates; continue; }
+            const uint64_t key = opt.exactFiles ? fileHash (c.data, pcmUsed->data) : rom->contentHash;
+            if (std::find (known.begin(), known.end(), key) != known.end()) { ++r.duplicates; continue; }
 
             // store the pair as <model version>/control.rom + pcm.rom
-            juce::String label = rom->model + (rom->version.isNotEmpty() ? " " + rom->version : juce::String());
+            juce::String label = opt.name ? opt.name (c.data) : juce::String();
+            if (label.isEmpty()) label = rom->model + (rom->version.isNotEmpty() ? " " + rom->version : juce::String());
             auto d = dir.getChildFile (juce::File::createLegalFileName (label));
             for (int k = 2; d.exists(); ++k) d = dir.getChildFile (juce::File::createLegalFileName (label + " (" + juce::String (k) + ")"));
             d.createDirectory();
             d.getChildFile ("control.rom").replaceWithData (c.data.getData(), c.data.getSize());
             d.getChildFile ("pcm.rom").replaceWithData (pcmUsed->data.getData(), pcmUsed->data.getSize());
-            if (auto stored = loadSetCached (d)) { known.push_back (stored->contentHash); r.added.push_back (stored); }
+            if (auto stored = loadSetCached (d)) { known.push_back (key); r.added.push_back (stored); }
         }
         return r;
+    }
+
+    // original signature (synth): same-sound duplicates, no library pairing
+    inline ImportResult importRoms (const juce::Array<juce::File>& items, std::vector<uint64_t> known)
+    {
+        return importRoms (items, std::move (known), ImportOptions());
     }
 }

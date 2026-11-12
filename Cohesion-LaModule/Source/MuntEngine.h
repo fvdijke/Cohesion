@@ -38,6 +38,8 @@ namespace munt
         void     (*renderFloatStreams) (Ctx, const DacStreams*, uint32_t) = nullptr;
         uint32_t (*partialCount) (Ctx) = nullptr;
         void     (*partialStates) (Ctx, uint8_t*) = nullptr;
+        struct RomInfo { const char *controlId, *controlDescription, *controlSha1, *pcmId, *pcmDescription, *pcmSha1; };
+        int      (*identifyRomData) (RomInfo*, const uint8_t*, size_t, const char*) = nullptr;   // optional (Munt 2.5+)
 
         static juce::File dllFile()
         {
@@ -76,6 +78,7 @@ namespace munt
             bind (renderFloatStreams, "mt32emu_render_float_streams");
             bind (partialCount, "mt32emu_get_partial_count");
             bind (partialStates, "mt32emu_get_partial_states");
+            identifyRomData = reinterpret_cast<decltype (identifyRomData)> (dll.getFunction ("mt32emu_identify_rom_data"));
             ok = all;
             if (! ok) error = "mt32emu.dll is missing functions (unsupported version)";
         }
@@ -167,6 +170,20 @@ public:
         if (! controlRom.loadFileAsData (c) || ! pcmRom.loadFileAsData (p)) return false;
         return canOpenData (c, p);
     }
+    // Munt's name for a control ROM, e.g. "MT-32 1.07", "CM-32LN 1.00", "MT-32 BlueRidge" ("" if unknown)
+    static juce::String controlName (const juce::MemoryBlock& c)
+    {
+        auto& L = munt::Lib::get();
+        if (! L.ok || L.identifyRomData == nullptr) return {};
+        munt::Lib::RomInfo info {};
+        if (L.identifyRomData (&info, static_cast<const uint8_t*> (c.getData()), c.getSize(), nullptr) != 0 || info.controlDescription == nullptr) return {};
+        const juce::String desc (info.controlDescription);                     // "CM-32LN/CM-500/LAPC-N Control v1.00"
+        const auto model = desc.upToFirstOccurrenceOf (" Control", false, false).upToFirstOccurrenceOf ("/", false, false).trim();
+        auto version = desc.fromFirstOccurrenceOf ("Control", false, false).trim();
+        if (version.startsWithChar ('v')) version = version.substring (1);
+        return (model + " " + version).trim();
+    }
+
     static bool canOpenData (const juce::MemoryBlock& c, const juce::MemoryBlock& p)
     {
         if (! available()) return false;

@@ -424,9 +424,11 @@ void LaModuleEditor::showRomMenu()
     m.addSeparator();
     m.addItem (2, cur.isNotEmpty() ? "Remove \"" + cur + "\"" : juce::String ("Remove the current set"), cur.isNotEmpty());
     m.addItem (3, "Remove sets Munt can't play (" + juce::String (unsupported) + ")", unsupported > 0);
+    const int total = proc.romLabels().size();
+    m.addItem (6, "Remove all sets (" + juce::String (total) + ")", total > 0);
     m.addSeparator();
     m.addItem (4, "Show ROM folder");
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&romBtn), [this, cur, unsupported] (int r)
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&romBtn), [this, cur, unsupported, total] (int r)
     {
         const juce::String note = "This deletes the module's stored copy (also used by COHESION - SYNTH). "
                                   "Your original ROM files are not touched; you can add them again with Add ROMs.";
@@ -444,6 +446,14 @@ void LaModuleEditor::showRomMenu()
             {
                 const int n = proc.removeUnsupportedRoms();
                 status = "Removed " + juce::String (n) + " unsupported set(s)";
+                refreshRomBox(); refreshAll();
+            });
+        if (r == 6)
+            confirmRemove ("Remove all ROM sets", "Remove all " + juce::String (total) + " ROM sets?\n\n" + note, [this]
+            {
+                int n = 0;
+                for (auto& l : proc.romLabels()) if (proc.removeRom (l)) ++n;
+                status = "Removed " + juce::String (n) + " set(s): add ROMs again with the ROM button";
                 refreshRomBox(); refreshAll();
             });
         if (r == 4) { auto d = romlib::userRomDir(); d.createDirectory(); d.startAsProcess(); }
