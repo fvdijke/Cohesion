@@ -32,6 +32,7 @@ LaModuleProcessor::LaModuleProcessor()
     pEcSync = rawId (lpid::ecSync); pEcDiv = rawId (lpid::ecDiv);
     pEcTime = rawId (lpid::ecTime); pEcFb = rawId (lpid::ecFb);
     pEcLevel = rawId (lpid::ecLevel);
+    pRvOn = rawId (lpid::rvOn); pEcOn = rawId (lpid::ecOn);
     for (auto* id : { lpid::rvMode, lpid::rvTime, lpid::rvLevel }) apvts.addParameterListener (id, this);
 
     const auto sets = romlib::storedSets();
@@ -78,6 +79,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout LaModuleProcessor::createLay
         l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::part (p, "out"), 1 }, nm + " Output",
                StringArray { "MAIN", "OUT " + String (p + 2) }, 0));
     }
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::rvOn, 1 }, "Reverb On", true));
+    l.add (std::make_unique<AudioParameterBool> (ParameterID { lpid::ecOn, 1 }, "Echo On", true));
     l.add (std::make_unique<AudioParameterChoice> (ParameterID { lpid::rvMode, 1 }, "Reverb Mode", StringArray { "ROOM", "HALL", "PLATE", "TAP DELAY" }, 0));
     l.add (std::make_unique<AudioParameterInt> (ParameterID { lpid::rvTime, 1 }, "Reverb Time", 0, 7, 5));
     l.add (std::make_unique<AudioParameterInt> (ParameterID { lpid::rvLevel, 1 }, "Reverb Level", 0, 7, 3));
@@ -440,7 +443,16 @@ void LaModuleProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             fp.ecDamp = 0.3f; fp.ecWidth = 0.8f; fp.ecPing = true; fp.ecMix = 1.0f; fp.bpm = bpm;
             echo.process (ecL, ecR, len, fp);
             const float el = pEcLevel->load();
-            for (int i = 0; i < len; ++i) { mL[i] += wtL[i] + ecL[i] * el; mR[i] += wtR[i] + ecR[i] * el; }
+            // on / off with a 10 ms fade (the effects keep running, so switching on brings back a natural tail)
+            const float rvT = pRvOn->load() > 0.5f ? 1.0f : 0.0f, ecT = pEcOn->load() > 0.5f ? 1.0f : 0.0f;
+            const float step = 1.0f / (float) (0.01 * sr);
+            for (int i = 0; i < len; ++i)
+            {
+                rvGain += juce::jlimit (-step, step, rvT - rvGain);
+                ecGain += juce::jlimit (-step, step, ecT - ecGain);
+                mL[i] += wtL[i] * rvGain + ecL[i] * el * ecGain;
+                mR[i] += wtR[i] * rvGain + ecR[i] * el * ecGain;
+            }
         }
     }
 

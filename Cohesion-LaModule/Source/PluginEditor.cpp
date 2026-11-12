@@ -200,6 +200,10 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
     ecSyncBtn.setClickingTogglesState (true);
     ecSyncAtt = std::make_unique<ButtonAtt> (a, lpid::ecSync, ecSyncBtn);
     canvas.addAndMakeVisible (ecSyncBtn);
+    rvOnAtt = std::make_unique<ButtonAtt> (a, lpid::rvOn, rvOnBtn);
+    ecOnAtt = std::make_unique<ButtonAtt> (a, lpid::ecOn, ecOnBtn);
+    canvas.addAndMakeVisible (rvOnBtn);
+    canvas.addAndMakeVisible (ecOnBtn);
 
     refreshRomBox();
 
@@ -253,6 +257,8 @@ void LaModuleEditor::layout()
     rvTime->setBounds (390, 540, 70, 98);
     rvLevel->setBounds (466, 540, 70, 98);
     ecSyncBtn.setBounds (952, 538, 56, 22);
+    rvOnBtn.setBounds (32, 537, 90, 18);
+    ecOnBtn.setBounds (584, 537, 70, 18);
     ecDiv->setBounds (600, 552, 90, 86);
     ecTime->setBounds (600, 552, 90, 86);
     ecFb->setBounds (720, 552, 90, 86);
@@ -292,10 +298,8 @@ void LaModuleEditor::paintCanvas (juce::Graphics& g)
     panelBox (g, { 20.0f, 530.0f, 540.0f, 116.0f });
     panelBox (g, { 572.0f, 530.0f, 448.0f, 116.0f });
     g.setColour (ui::label); g.setFont (ui::font (10.0f, true));
-    g.drawText ("REVERB", 36, 538, 100, 16, juce::Justification::centredLeft);
-    g.drawText ("ECHO", 588, 538, 100, 16, juce::Justification::centredLeft);
     g.setColour (ui::dim); g.setFont (ui::font (10.0f));
-    g.drawText ("send parts with their ECHO knob", 640, 538, 300, 16, juce::Justification::centredLeft);
+    g.drawText ("send parts with their ECHO knob", 660, 538, 280, 16, juce::Justification::centredLeft);
     g.drawFittedText (juce::String::fromUTF8 (proc.usingMunt() ? "MT-32 system reverb (Munt) \xc2\xb7 set by SysEx 10 00 01"
                                                                : "MT-32 style system reverb \xc2\xb7 set by SysEx 10 00 01"),
                       36, 596, 340, 36, juce::Justification::centredLeft, 2);
@@ -343,6 +347,11 @@ void LaModuleEditor::refreshAll()
     const bool sync = ecSyncBtn.getToggleState();
     styleButton (ecSyncBtn, sync);
     ecDiv->setVisible (sync); ecTime->setVisible (! sync);
+    const float rvA = rvOnBtn.getToggleState() ? 1.0f : 0.35f, ecA = ecOnBtn.getToggleState() ? 1.0f : 0.35f;
+    for (auto* c : { (juce::Component*) &rvModeBtn[0], (juce::Component*) &rvModeBtn[1], (juce::Component*) &rvModeBtn[2],
+                     (juce::Component*) &rvModeBtn[3], (juce::Component*) rvTime.get(), (juce::Component*) rvLevel.get() }) c->setAlpha (rvA);
+    for (auto* c : { (juce::Component*) &ecSyncBtn, (juce::Component*) ecDiv.get(), (juce::Component*) ecTime.get(),
+                     (juce::Component*) ecFb.get(), (juce::Component*) ecLevel.get() }) c->setAlpha (ecA);
     if (want == 0 && ! munt && proc.muntStatus().isNotEmpty() && status.isEmpty())
         status = "MUNT unavailable (" + proc.muntStatus() + "): playing COHESION LA";
     for (int i = 0; i < mt::kParts; ++i) strips[i]->refresh (i == selected);

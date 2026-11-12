@@ -11,6 +11,7 @@ namespace lpid
 {
     inline juce::String part (int p, const char* what) { return "p" + juce::String (p + 1) + "_" + what; }
     static const char* engine = "engine", *master = "master";
+    static const char* rvOn = "rv_on", *ecOn = "ec_on";
     static const char* rvMode = "rv_mode", *rvTime = "rv_time", *rvLevel = "rv_level";
     static const char* ecSync = "ec_sync", *ecDiv = "ec_div", *ecTime = "ec_time", *ecFb = "ec_fb", *ecLevel = "ec_level";
 }
@@ -110,7 +111,8 @@ private:
     std::atomic<float>* pCh[mt::kParts] {}; std::atomic<float>* pLvl[mt::kParts] {}; std::atomic<float>* pPan[mt::kParts] {};
     std::atomic<float>* pRev[mt::kParts] {}; std::atomic<float>* pEch[mt::kParts] {}; std::atomic<float>* pMute[mt::kParts] {};
     std::atomic<float>* pSolo[mt::kParts] {}; std::atomic<float>* pOut[mt::kParts] {};
-    std::atomic<float> *pEngine = nullptr, *pMaster = nullptr, *pEcSync = nullptr, *pEcDiv = nullptr, *pEcTime = nullptr, *pEcFb = nullptr, *pEcLevel = nullptr;
+    std::atomic<float> *pEngine = nullptr, *pMaster = nullptr, *pEcSync = nullptr, *pEcDiv = nullptr, *pEcTime = nullptr, *pEcFb = nullptr, *pEcLevel = nullptr, *pRvOn = nullptr, *pEcOn = nullptr;
+    float rvGain = 1.0f, ecGain = 1.0f;
     std::atomic<int> partials { 0 };
     std::atomic<float> activity[mt::kParts] {}, midiActivity { 0.0f };
     std::atomic<bool> sysSync { false }, chanSync { false };

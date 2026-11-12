@@ -229,6 +229,24 @@ int main (int argc, char** argv)
                 juce::MessageManager::getInstance()->runDispatchLoopUntil (150);
                 check ((int) p.apvts.getRawParameterValue (lpid::rvMode)->load() == 2, "SysEx reverb mode -> PLATE in the UI parameter");
             }
+            // reverb / echo on-off switches
+            {
+                auto tailDb = [&] (bool rvOn, bool ecOn)
+                {
+                    setParam (p, lpid::rvOn, rvOn ? 1.0f : 0.0f); setParam (p, lpid::ecOn, ecOn ? 1.0f : 0.0f);
+                    setParam (p, lpid::part (0, "ech"), 1.0f); setParam (p, lpid::part (0, "rev"), 1.0f);
+                    setParam (p, lpid::rvLevel, 7.0f);
+                    p.requestPanic(); run (p, {}, 2.0, nch);
+                    juce::MidiBuffer m; m.addEvent (juce::MidiMessage::noteOn (2, 72, (juce::uint8) 110), 0); m.addEvent (juce::MidiMessage::noteOff (2, 72), 4800);
+                    const auto r = run (p, m, 1.5, nch);
+                    double e = 0; for (size_t i = 24000; i < r.main.size(); ++i) e += r.main[i] * r.main[i];
+                    return 10.0 * std::log10 (juce::jmax (1.0e-12, e / 48000.0));
+                };
+                const double both = tailDb (true, true), noRv = tailDb (false, true), noEc = tailDb (true, false), none = tailDb (false, false);
+                check (none < juce::jmin (noRv, noEc) - 20.0 && both >= juce::jmax (noRv, noEc) - 0.5, "REVERB / ECHO switches remove their tails",
+                       juce::String (both, 1) + " / -rv " + juce::String (noRv, 1) + " / -ec " + juce::String (noEc, 1) + " / none " + juce::String (none, 1) + " dB");
+                setParam (p, lpid::rvOn, 1.0f); setParam (p, lpid::ecOn, 1.0f); setParam (p, lpid::part (0, "ech"), 0.0f); setParam (p, lpid::rvLevel, 3.0f);
+            }
             // timbre write by SysEx (part 1 timbre temp name)
             {
                 const char nm[10] = { 'C', 'O', 'H', 'E', 'S', 'I', 'O', 'N', ' ', ' ' };
@@ -258,6 +276,7 @@ int main (int argc, char** argv)
         p.requestProgram (0, 0);
         juce::MidiBuffer m; m.addEvent (juce::MidiMessage::noteOn (2, 60, (juce::uint8) 100), 0); m.addEvent (juce::MidiMessage::noteOn (10, 36, (juce::uint8) 100), 0);
         setParam (p, lpid::part (5, "mute"), 1.0f);
+        setParam (p, lpid::ecOn, 0.0f); // snapshot: echo switched off
         setParam (p, lpid::part (2, "out"), 1.0f);
         run (p, m, 0.1, nch);
         std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());

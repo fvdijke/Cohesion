@@ -73,6 +73,27 @@ struct Led : juce::Component
     }
 };
 
+// Panel title that is also its on / off switch: dimmed when off, green when on.
+struct TitleToggle : juce::Button
+{
+    explicit TitleToggle (const juce::String& t) : juce::Button (t)
+    {
+        setClickingTogglesState (true);
+        setMouseCursor (juce::MouseCursor::PointingHandCursor);
+        setTooltip ("Click to switch " + t.toLowerCase() + " on / off");
+    }
+    void paintButton (juce::Graphics& g, bool over, bool) override
+    {
+        const bool on = getToggleState();
+        auto r = getLocalBounds().toFloat();
+        auto dot = r.removeFromLeft (12.0f).withSizeKeepingCentre (7.0f, 7.0f);
+        g.setColour (on ? ui::teal : juce::Colour (0xff2b3138)); g.fillEllipse (dot);
+        g.setColour (on ? ui::teal : ui::label.withAlpha (over ? 0.9f : 0.6f));
+        g.setFont (ui::font (10.5f, true));
+        g.drawText (getButtonText(), r.withTrimmedLeft (3.0f), juce::Justification::centredLeft);
+    }
+};
+
 class LaModuleEditor;
 
 // One MT-32 part: MIDI channel, patch, fader, pan, sends, mute / solo, output.
@@ -160,6 +181,8 @@ private:
     std::unique_ptr<Knob> rvTime, rvLevel, ecDiv, ecTime, ecFb, ecLevel;
     juce::TextButton ecSyncBtn { "SYNC" };
     std::unique_ptr<ButtonAtt> ecSyncAtt;
+    TitleToggle rvOnBtn { "REVERB" }, ecOnBtn { "ECHO" };
+    std::unique_ptr<ButtonAtt> rvOnAtt, ecOnAtt;
 
     std::unique_ptr<juce::FileChooser> chooser;
 
