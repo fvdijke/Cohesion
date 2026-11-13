@@ -5,6 +5,7 @@
 #include <memory>
 #include <cmath>
 #include "PluginProcessor.h"
+#include "CohesionUpdateCheck.h"
 #include "LookAndFeel.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -157,6 +158,7 @@ private:
     CohesionLookAndFeel lnf;
 
     juce::Label title, subtitle, subcap;
+    cohesion::UpdateBadge updateBadge;   // UPDATE AVAILABLE (start-up version check)
     juce::TextButton prevBtn { "<" }, nextBtn { ">" }, presetBtn;
 
     AdtVisualizer viz { proc };

@@ -26,3 +26,7 @@ if(EXISTS "${FLUID_DIR}/CMakeLists.txt")
     add_custom_command(TARGET FontTest POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:libfluidsynth>" "$<TARGET_FILE_DIR:FontTest>/")
 endif()
+
+# The editor needs the shared update-check header (no app id: never goes online).
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../Common/CohesionVersion.cmake")
+cohesion_update_check(FontTest)

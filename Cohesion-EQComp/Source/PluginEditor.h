@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include "PluginProcessor.h"
+#include "CohesionUpdateCheck.h"
 #include "LookAndFeel.h"
 #include "EqCurve.h"
 #include "MbCrossover.h"
@@ -1117,6 +1118,7 @@ private:
     juce::Component content;
 
     juce::Label title, subtitle;
+    cohesion::UpdateBadge updateBadge;   // UPDATE AVAILABLE (start-up version check)
     juce::TextButton eqTab { "EQ" }, mbTab { "MULTIBAND" }, asTab { "ASSIST" };
     juce::Label bandsL;
     juce::TextButton bandsBtn[4];

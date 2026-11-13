@@ -15,6 +15,7 @@ CohesionEQCompAudioProcessorEditor::CohesionEQCompAudioProcessorEditor (Cohesion
     subtitle.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain).withExtraKerningFactor (0.1f));
     subtitle.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.55f));
     content.addAndMakeVisible (subtitle);
+    content.addChildComponent (updateBadge);
 
     for (auto* t : { &eqTab, &mbTab, &asTab })
     {
@@ -177,6 +178,7 @@ void CohesionEQCompAudioProcessorEditor::layoutContent()
     // title / subtitle: same placement as the GLUE tool (absolute 14,22 / 14,43)
     title.setBounds    (14, 22, 280, 26);
     subtitle.setBounds (14, 43, 180, 16);
+    updateBadge.placeAfter (subtitle);
 
     const int tw = 100, th = 30, gap = 6;
     int tx = centerX - (3 * tw + 2 * gap) / 2;

@@ -18,6 +18,7 @@ CohesionTransientAudioProcessorEditor::CohesionTransientAudioProcessorEditor (Co
     lab (subtitle, "by Pepperwood", 11.0f, juce::Colours::white.withAlpha (0.55f));
     lab (subcap, "Transient Shaper", 10.0f, juce::Colour (0xff6c7a74));
 
+    addChildComponent (updateBadge);
     addAndMakeVisible (viz);
 
     for (auto* b : { &prevBtn, &nextBtn })
@@ -92,6 +93,7 @@ void CohesionTransientAudioProcessorEditor::resized()
 {
     title.setBounds    (22, 26, 320, 26);
     subtitle.setBounds (22, 47, 180, 16);
+    updateBadge.placeAfter (subtitle);
     subcap.setBounds   (360, 46, 180, 14);
 
     prevBtn.setBounds   (520, 30, 24, 30);

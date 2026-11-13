@@ -67,6 +67,9 @@ int main (int argc, char** argv)
         std::printf ("  fresh instance reloads: %d presets [%s]\n", b.numPresets(), b.numPresets() == a.numPresets() ? "OK" : "FAIL");
     }
 
+    const auto presetTmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("cohesion-preset-test");
+    presetTmp.deleteRecursively();
+    setEnv ("COHESION_SYNTH_PRESET_DIR", presetTmp.getFullPathName());
     CohesionSynthAudioProcessor proc;
     proc.prepareToPlay (48000.0, 512);
 
@@ -122,8 +125,21 @@ int main (int argc, char** argv)
         std::printf ("processor LA path: held peak %.3f, tail 3 s after release %.5f, finite %s\n", held, tail, finite ? "yes" : "NO");
     }
 
+    {   // closing an editor while the update check is still connecting must not wait on the network
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        std::unique_ptr<juce::AudioProcessorEditor> quick (proc.createEditor());
+        quick.reset();
+        std::printf ("update check: open + close editor during the check took %.0f ms\n", juce::Time::getMillisecondCounterHiRes() - t0);
+    }
     std::unique_ptr<CohesionSynthAudioProcessorEditor> ed (dynamic_cast<CohesionSynthAudioProcessorEditor*> (proc.createEditor()));
     ed->setOpaque (true);
+    if (auto* badge = cohesion::UpdateBadge::find (*ed))   // start-up version check (COHESION_UPDATE_URL may point at a local versions.json)
+    {
+        badge->waitForCheck (5000);
+        std::printf ("update check: this build %s, published %s -> badge %s%s\n", cohesion::update::currentVersion().toRawUTF8(),
+                     badge->hasUpdate() ? badge->getNewVersion().toRawUTF8() : "(not newer / unknown)",
+                     badge->isVisible() ? "SHOWN" : "hidden", badge->hasUpdate() ? ("  tooltip: " + badge->getTooltipText()).toRawUTF8() : "");
+    }
     auto save = [&] (const juce::String& name)
     {
         auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
@@ -132,9 +148,53 @@ int main (int argc, char** argv)
         juce::PNGImageFormat().writeImageToStream (img, os);
         std::printf ("wrote %s\n", outDir.getChildFile (name + ".png").getFullPathName().toRawUTF8());
     };
-    const char* names[] = { "1-osc-mix", "2-fm", "3-la", "4-filter-mod", "5-fx", "6-arp" };
-    for (int t = 0; t < 6; ++t) { ed->showTab (t); save (names[t]); }
+    const char* names[] = { "1-osc-mix", "2-fm", "3-la", "4-filter-mod", "5-fx", "6-arp", "6b-mixer" };
+    for (int t = 0; t < 7; ++t) { ed->showTab (t); save (names[t]); }
+    {   // a multi sound: VA pad + (if a DX7 bank is present) an FM voice in the FM part, split and panned
+        int pad = -1, dx = -1;
+        for (int i = 0; i < proc.numPresets(); ++i)
+        {
+            if (pad < 0 && proc.presetCategory (i) == "Pad") pad = i;
+            if (dx < 0 && proc.presetIsSysEx (i)) dx = i;
+        }
+        proc.loadPreset (pad);
+        if (dx >= 0) proc.loadPresetIntoPart (dx, pid::kFM);
+        std::printf ("multi sound: %s\n", proc.headerName().toRawUTF8());
+        auto setN = [&] (const juce::String& id, float v) { auto* q = proc.apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        setN (pid::partKeyHi (pid::kVA), 59); setN (pid::partKeyLo (pid::kFM), 60); setN (pid::partPan (pid::kFM), 0.3f);
+        setN (pid::partReverb (pid::kFM), 0.4f); setN (pid::partFilter (pid::kFM), 1); setN (pid::partSolo (pid::kVA), 0);
+        ed->presetLoaded(); ed->showTab (6); save ("6c-mixer-multi");
+        ed->getLibrary()->open (pid::kVA); save ("6d-library-va-part");
+        ed->getLibrary()->close();
+    }
+    {   // OSC 1 in WT mode: the BANK choice replaces the waveform choice
+        auto setN = [&] (const juce::String& id, float v) { auto* q = proc.apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        setN (pid::oscMode (1), 1); setN (pid::oscWtBank (1), 7); setN (pid::oscWtPos (1), 0.6f);
+        ed->showTab (0); save ("1b-osc-wavetable");
+        setN (pid::oscMode (1), 0);
+    }
+    // a loaded preset opens the tab of its engine
+    {
+        auto setN = [&] (const juce::String& id, float v) { auto* q = proc.apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        ed->showTab (4); proc.loadPreset (1); ed->presetLoaded();
+        const int vaTab = ed->getCurrentTab();
+        for (int i = 1; i <= 4; ++i) setN (pid::oscOn (i), 0); setN (pid::dxOn, 1); ed->presetLoaded();
+        const int fmTab = ed->getCurrentTab();
+        setN (pid::dxOn, 0); setN (pid::laOn, 1); ed->presetLoaded();
+        const int laTab = ed->getCurrentTab();
+        setN (pid::laOn, 0);
+        std::printf ("tab after load: VA %d, FM %d, LA %d  [%s]\n", vaTab, fmTab, laTab, (vaTab == 0 && fmTab == 1 && laTab == 2) ? "OK" : "FAIL");
+    }
     ed->showTab (0); ed->openLibrary(); save ("7-library");
+    ed->getLibrary()->search.setText ("pad warm"); ed->getLibrary()->search.onTextChange(); save ("7b-library-search"); ed->getLibrary()->search.clear();
+    ed->getLibrary()->search.onTextChange();
+    ed->getLibrary()->selectCategory (ed->getLibrary()->cats.indexOf ("User"), false); save ("7c-library-user-empty");
+    proc.loadPreset (5);  proc.saveUserPreset ("My Bass", false);
+    proc.loadPreset (40); proc.saveUserPreset ("Evening Pad", false);
+    ed->getLibrary()->open(); save ("7d-library-user");
+    ed->getLibrary()->close();
+    presetTmp.deleteRecursively();
+    setEnv ("COHESION_SYNTH_PRESET_DIR", {});
     ed->setSize (728, 504);   ed->showTab (5); save ("8-scaled-70");
     ed->setSize (1560, 1080); ed->showTab (4); save ("9-scaled-150");
     if (romTmp != juce::File()) { romTmp.deleteRecursively(); setEnv ("COHESION_SYNTH_ROM_DIR", {}); }

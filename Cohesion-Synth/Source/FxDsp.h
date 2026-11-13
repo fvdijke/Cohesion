@@ -151,7 +151,8 @@ namespace fx
     struct Phaser
     {
         double sr = 44100.0, ph = 0.0;
-        float zx[2][12] {}, zy[2][12] {}, fb[2] {};
+        float zx[2][12] {}, zy[2][12] {}, fb[2] {}, coef[2] {};
+        int ctl = 0;
         void prepare (double s) { sr = s; reset(); }
         void reset()            { for (int c = 0; c < 2; ++c) { fb[c] = 0; for (int k = 0; k < 12; ++k) zx[c][k] = zy[c][k] = 0; } }
 
@@ -168,13 +169,22 @@ namespace fx
             float* io[2] = { L, R };
             for (int i = 0; i < n; ++i)
             {
+                // the sweep moves slowly: all-pass coefficients at control rate (every 8 samples)
+                if (ctl-- <= 0)
+                {
+                    ctl = 7;
+                    for (int c = 0; c < 2; ++c)
+                    {
+                        const double pc = ph + (c == 1 ? spread : 0.0);
+                        const float lfo = 0.5f + 0.5f * (float) std::sin (juce::MathConstants<double>::twoPi * pc);
+                        const float f = juce::jmin (nyq, 140.0f * std::exp2 (octaves * lfo));
+                        const float t = std::tan (juce::MathConstants<float>::pi * f / (float) sr);
+                        coef[c] = (t - 1.0f) / (t + 1.0f);
+                    }
+                }
                 for (int c = 0; c < 2; ++c)
                 {
-                    const double pc = ph + (c == 1 ? spread : 0.0);
-                    const float lfo = 0.5f + 0.5f * (float) std::sin (juce::MathConstants<double>::twoPi * pc);
-                    const float f = juce::jmin (nyq, 140.0f * std::pow (2.0f, octaves * lfo));
-                    const float t = std::tan (juce::MathConstants<float>::pi * f / (float) sr);
-                    const float a = (t - 1.0f) / (t + 1.0f);
+                    const float a = coef[c];
                     const float in = io[c][i];
                     float x = in + fb[c] * fbAmt;
                     for (int s = 0; s < stages; ++s)
@@ -217,9 +227,10 @@ namespace fx
                 lpL = (1.0f - a) * wl + a * lpL;
                 lpR = (1.0f - a) * wr + a * lpR;
                 float inL, inR;
-                if (p.ecPing) { inL = 0.5f * (L[i] + R[i]) + lpR * fb; inR = lpL * fb; }
-                else          { inL = L[i] + lpL * fb;                 inR = R[i] + lpR * fb; }
-                dL.push (softSat (inL)); dR.push (softSat (inR));
+                // only the feedback saturates (tape-like repeats); the dry input goes in clean
+                if (p.ecPing) { inL = 0.5f * (L[i] + R[i]) + softSat (lpR * fb); inR = softSat (lpL * fb); }
+                else          { inL = L[i] + softSat (lpL * fb);                 inR = R[i] + softSat (lpR * fb); }
+                dL.push (inL); dR.push (inR);
                 const float mid = 0.5f * (wl + wr), side = 0.5f * (wl - wr) * width;
                 L[i] = L[i] * dG + (mid + side) * wG;
                 R[i] = R[i] * dG + (mid - side) * wG;
@@ -382,19 +393,39 @@ namespace fx
     // ======================================================================
     //  The chain: free order, per-effect click-free on/off ramps.
     // ======================================================================
+    //  Multi sounds (processParts): COMP, FLANGER and PHASER are inserts that run once per
+    //  part (in their order); ECHO and REVERB are shared send effects. Each part sends a share
+    //  of its signal to them, and the effect's MIX acts only on what was sent:
+    //      out = in - send + fx(send)
+    //  so with every send at 100 % this is exactly the serial chain above. The echo return
+    //  feeds the reverb (when the reverb comes after the echo) by the parts' weighted sends.
+    //  With one part (or process()) it is the plain serial chain.
+    // ======================================================================
     struct FxChain
     {
-        Compressor comp; Flanger fl; Phaser ph; Echo ec; Reverb rv; Limiter lim;
-        float ramp[kNumFx] {};
-        std::vector<float> tL, tR;
+        static constexpr int kParts = 3;
+        Compressor comp; Flanger fl; Phaser ph; Echo ec; Reverb rv; Limiter lim;   // inserts of part 0
+        Compressor comp2[kParts - 1]; Flanger fl2[kParts - 1]; Phaser ph2[kParts - 1];   // parts 1, 2
+        float ramp[kNumFx] {};                    // part 0 / shared effects
+        double flPhase = 0.0, phPhase = 0.0; int phCtl = 0;   // one LFO for the flangers / phasers of all parts
+        float rampP[kParts - 1][kNumFx] {};        // inserts of parts 1, 2
+        std::vector<float> tL, tR, eL, eR, rL, rR, yL, yR;
         int maxBlock = 512; double sr = 44100.0;
+
+        Compressor& compOf (int p) { return p == 0 ? comp : comp2[p - 1]; }
+        Flanger&    flOf   (int p) { return p == 0 ? fl   : fl2[p - 1]; }
+        Phaser&     phOf   (int p) { return p == 0 ? ph   : ph2[p - 1]; }
+        float*      rampOf (int p) { return p == 0 ? ramp : rampP[p - 1]; }
+        float compGrDb() const { return juce::jmax (comp.grDb.load(), comp2[0].grDb.load(), comp2[1].grDb.load()); }
 
         void prepare (double s, int block)
         {
             sr = s; maxBlock = juce::jmax (64, block);
-            tL.assign ((size_t) maxBlock, 0.0f); tR.assign ((size_t) maxBlock, 0.0f);
+            for (auto* v : { &tL, &tR, &eL, &eR, &rL, &rR, &yL, &yR }) v->assign ((size_t) maxBlock, 0.0f);
             comp.prepare (s); fl.prepare (s); ph.prepare (s); ec.prepare (s); rv.prepare (s); lim.prepare (s);
+            for (int k = 0; k < kParts - 1; ++k) { comp2[k].prepare (s); fl2[k].prepare (s); ph2[k].prepare (s); }
             for (auto& r : ramp) r = 0.0f;
+            for (auto& rp : rampP) for (auto& r : rp) r = 0.0f;
         }
 
         bool isOn (int fxId, const FxParams& p) const
@@ -403,46 +434,137 @@ namespace fx
                             case kEcho: return p.ecOn; case kReverb: return p.rvOn; default: return false; }
         }
 
-        void runFx (int fxId, float* L, float* R, int n, const FxParams& p)
+        void runFx (int fxId, int part, float* L, float* R, int n, const FxParams& p)
         {
-            switch (fxId) { case kComp: comp.process (L, R, n, p); break; case kFlanger: fl.process (L, R, n, p); break;
-                            case kPhaser: ph.process (L, R, n, p); break; case kEcho: ec.process (L, R, n, p); break;
+            switch (fxId) { case kComp: compOf (part).process (L, R, n, p); break; case kFlanger: flOf (part).process (L, R, n, p); break;
+                            case kPhaser: phOf (part).process (L, R, n, p); break; case kEcho: ec.process (L, R, n, p); break;
                             case kReverb: rv.process (L, R, n, p); break; default: break; }
         }
 
-        void resetFx (int fxId)
+        void resetFx (int fxId, int part)
         {
-            switch (fxId) { case kComp: comp.reset(); break; case kFlanger: fl.reset(); break; case kPhaser: ph.reset(); break;
+            switch (fxId) { case kComp: compOf (part).reset(); break; case kFlanger: flOf (part).reset(); break; case kPhaser: phOf (part).reset(); break;
                             case kEcho: ec.reset(); break; case kReverb: rv.reset(); break; default: break; }
+        }
+        void resetFx (int fxId) { for (int k = 0; k < kParts; ++k) resetFx (fxId, k); }
+        void resetAll()
+        {
+            for (int k = 0; k < kNumFx; ++k) resetFx (k);
+            for (int k = 0; k < kParts; ++k) { flOf (k).dL.reset(); flOf (k).dR.reset(); }   // the flanger keeps feeding its lines
+            lim.reset();
+        }
+
+        // one effect on l / r with its click-free on/off ramp
+        void stage (int id, int part, float* l, float* r, int n, const FxParams& p, float& rampV)
+        {
+            const float rc = 1.0f - std::exp (-1.0f / (float) (sr * 0.01));   // 10 ms on/off ramp
+            const float tgt = isOn (id, p) ? 1.0f : 0.0f;
+            if (tgt == 0.0f && rampV <= 0.0f) { if (id == kFlanger) flOf (part).feed (l, r, n); return; }
+            if (tgt == 1.0f && rampV >= 1.0f) { runFx (id, part, l, r, n, p); return; }
+            // ramping: process a copy and blend sample by sample
+            std::copy (l, l + n, tL.begin()); std::copy (r, r + n, tR.begin());
+            runFx (id, part, tL.data(), tR.data(), n, p);
+            float g = rampV;
+            for (int i = 0; i < n; ++i)
+            {
+                g += (tgt - g) * rc;
+                l[i] += (tL[(size_t) i] - l[i]) * g;
+                r[i] += (tR[(size_t) i] - r[i]) * g;
+            }
+            if (tgt == 1.0f && g > 0.999f) g = 1.0f;
+            if (tgt == 0.0f && g < 0.001f) { g = 0.0f; resetFx (id, part); }
+            rampV = g;
         }
 
         void process (float* L, float* R, int total, const FxParams& p, const int* order)
         {
-            const float rc = 1.0f - std::exp (-1.0f / (float) (sr * 0.01));   // 10 ms on/off ramp
             for (int start = 0; start < total; start += maxBlock)
             {
                 const int n = juce::jmin (maxBlock, total - start);
-                float* l = L + start; float* r = R + start;
                 for (int slot = 0; slot < kNumFx; ++slot)
                 {
                     const int id = order[slot];
-                    if (id < 0 || id >= kNumFx) continue;
-                    const float tgt = isOn (id, p) ? 1.0f : 0.0f;
-                    if (tgt == 0.0f && ramp[id] <= 0.0f) { if (id == kFlanger) fl.feed (l, r, n); continue; }
-                    if (tgt == 1.0f && ramp[id] >= 1.0f) { runFx (id, l, r, n, p); continue; }
-                    // ramping: process a copy and blend sample by sample
-                    std::copy (l, l + n, tL.begin()); std::copy (r, r + n, tR.begin());
-                    runFx (id, tL.data(), tR.data(), n, p);
-                    float g = ramp[id];
+                    if (id >= 0 && id < kNumFx) stage (id, 0, L + start, R + start, n, p, ramp[id]);
+                }
+            }
+        }
+
+        // Multi sound: part buses pl / pr (gain and pan already applied, processed in place by
+        // the inserts), `active` parts only; the sum goes to outL / outR.
+        void processParts (float* const* pl, float* const* pr, const bool* active, const float* sendEcho,
+                           const float* sendReverb, float* outL, float* outR, int total, const FxParams& p, const int* order)
+        {
+            for (int start = 0; start < total; start += maxBlock)
+            {
+                const int n = juce::jmin (maxBlock, total - start);
+                // the parts' flangers / phasers sweep together (one shared LFO phase)
+                for (int k = 0; k < kParts; ++k) { flOf (k).ph = flPhase; phOf (k).ph = phPhase; phOf (k).ctl = phCtl; }
+                flPhase += (double) n * (double) modSyncHz (p.flSync, p.flRate, p.bpm) / sr; flPhase -= std::floor (flPhase);
+                phPhase += (double) n * (double) modSyncHz (p.phSync, p.phRate, p.bpm) / sr; phPhase -= std::floor (phPhase);
+                phCtl = ((phCtl - n) % 8 + 8) % 8;
+                // 1. inserts per part, in their order
+                for (int k = 0; k < kParts; ++k)
+                {
+                    float* rp = rampOf (k);
+                    if (! active[k])
+                    {   // silent part: its inserts rest (ramps follow the switches, no fade on return)
+                        for (int id : { (int) kComp, (int) kFlanger, (int) kPhaser })
+                        {
+                            const float tgt = isOn (id, p) ? 1.0f : 0.0f;
+                            if (rp[id] != tgt) { rp[id] = tgt; resetFx (id, k); }
+                        }
+                        continue;
+                    }
+                    for (int slot = 0; slot < kNumFx; ++slot)
+                    {
+                        const int id = order[slot];
+                        if (id == kComp || id == kFlanger || id == kPhaser)
+                            stage (id, k, pl[k] + start, pr[k] + start, n, p, rp[id]);
+                    }
+                }
+                // 2. sum, and the sends
+                float* oL = outL + start; float* oR = outR + start;
+                std::fill (oL, oL + n, 0.0f); std::fill (oR, oR + n, 0.0f);
+                std::fill (eL.begin(), eL.begin() + n, 0.0f); std::fill (eR.begin(), eR.begin() + n, 0.0f);
+                std::fill (rL.begin(), rL.begin() + n, 0.0f); std::fill (rR.begin(), rR.begin() + n, 0.0f);
+                float sumE = 0.0f, sumER = 0.0f, sumR = 0.0f, sumRE = 0.0f;
+                for (int k = 0; k < kParts; ++k)
+                {
+                    if (! active[k]) continue;
+                    const float* l = pl[k] + start; const float* r = pr[k] + start;
+                    const float se = sendEcho[k], sv = sendReverb[k];
                     for (int i = 0; i < n; ++i)
                     {
-                        g += (tgt - g) * rc;
-                        l[i] += (tL[(size_t) i] - l[i]) * g;
-                        r[i] += (tR[(size_t) i] - r[i]) * g;
+                        oL[i] += l[i]; oR[i] += r[i];
+                        eL[(size_t) i] += se * l[i]; eR[(size_t) i] += se * r[i];
+                        rL[(size_t) i] += sv * l[i]; rR[(size_t) i] += sv * r[i];
                     }
-                    if (tgt == 1.0f && g > 0.999f) g = 1.0f;
-                    if (tgt == 0.0f && g < 0.001f) { g = 0.0f; resetFx (id); }
-                    ramp[id] = g;
+                    sumE += se; sumER += se * sv; sumR += sv; sumRE += sv * se;
+                }
+                // the return of the first send effect feeds the second by the parts' weighted sends
+                const float echoToRev = sumE > 1.0e-6f ? sumER / sumE : 0.0f;
+                const float revToEcho = sumR > 1.0e-6f ? sumRE / sumR : 0.0f;
+                int first = -1;
+                for (int slot = 0; slot < kNumFx && first < 0; ++slot)
+                    if (order[slot] == kEcho || order[slot] == kReverb) first = order[slot];
+                const int second = first == kEcho ? kReverb : kEcho;
+                for (int id : { first, second })
+                {
+                    if (id < 0) continue;
+                    float* sL = (id == kEcho ? eL : rL).data(); float* sR = (id == kEcho ? eR : rR).data();
+                    if (! isOn (id, p) && ramp[id] <= 0.0f) continue;   // off: out stays as it is
+                    std::copy (sL, sL + n, yL.begin()); std::copy (sR, sR + n, yR.begin());
+                    stage (id, 0, yL.data(), yR.data(), n, p, ramp[id]);
+                    // out = in - send + fx(send); the return (fx(send) - send) also feeds the other send
+                    float* oth  = (id == kEcho ? rL : eL).data(); float* othR = (id == kEcho ? rR : eR).data();
+                    const float w = id == kEcho ? echoToRev : revToEcho;
+                    const bool feedOther = (id == first);
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float retL = yL[(size_t) i] - sL[i], retR = yR[(size_t) i] - sR[i];
+                        oL[i] += retL; oR[i] += retR;
+                        if (feedOther) { oth[i] += w * retL; othR[i] += w * retR; }
+                    }
                 }
             }
         }

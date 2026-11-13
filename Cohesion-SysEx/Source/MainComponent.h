@@ -5,6 +5,7 @@
 #include "AlgoDiagram.h"
 #include "VoiceIndex.h"
 #include "PreviewSynth.h"
+#include "CohesionUpdateCheck.h"
 
 namespace ui
 {
@@ -270,6 +271,7 @@ public:
         lnf.setColour (juce::AlertWindow::backgroundColourId, ui::bg);
         lnf.setColour (juce::AlertWindow::textColourId, ui::text);
         lnf.setColour (juce::ResizableWindow::backgroundColourId, ui::bg);
+        addChildComponent (updateBadge);   // UPDATE AVAILABLE (start-up version check)
         lnf.setColour (juce::Label::textColourId, ui::text);
         lnf.setColour (juce::TooltipWindow::backgroundColourId, ui::panel);
         lnf.setColour (juce::TooltipWindow::textColourId, ui::text);
@@ -825,6 +827,9 @@ private:
     {
         auto r = getLocalBounds();
         auto top = r.removeFromTop (58).reduced (20, 13);
+        // right after the "DX7 BANK BUILDER" caption painted in paint()
+        updateBadge.setFontHeight (10.0f);
+        updateBadge.placeAt (20 + 230 + juce::roundToInt (ui::font (13.0f, true).getStringWidthFloat ("DX7 BANK BUILDER")) + 12, 21, 17);
         audioBtn.setBounds (top.removeFromRight (110));      top.removeFromRight (8);
         rescanBtn.setBounds (top.removeFromRight (80));      top.removeFromRight (8);
         collectionBtn.setBounds (top.removeFromRight (130)); top.removeFromRight (20);
@@ -887,6 +892,7 @@ private:
     SlotGrid grid;
     VoiceDetails details;
     juce::TooltipWindow tooltips { this, 600 };
+    cohesion::UpdateBadge updateBadge;
 
     juce::MidiKeyboardState kbState;
     juce::MidiKeyboardComponent keyboard { kbState, juce::MidiKeyboardComponent::horizontalKeyboard };

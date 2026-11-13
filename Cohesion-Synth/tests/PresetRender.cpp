@@ -10,8 +10,18 @@
 static const double SR = 48000.0;
 
 struct Spec { std::vector<int> notes; double hold; };
-static Spec specFor (const juce::String& cat)
+static Spec specFor (juce::String cat)
 {
+    // General MIDI families -> the closest factory category
+    if (cat.startsWith ("GM"))
+    {
+        if (cat.contains ("Bass"))                                         return { { 36 }, 1.5 };
+        if (cat.contains ("Lead") || cat.contains ("Reed") || cat.contains ("Brass") || cat.contains ("Pipe")) return { { 60 }, 1.5 };
+        if (cat.contains ("Effects"))                                      return { { 48 }, 4.0 };
+        if (cat.contains ("Pad") || cat.contains ("Ensemble") || cat.contains ("Strings")) return { { 48, 52, 55 }, 3.0 };
+        if (cat.contains ("Percussive"))                                   return { { 48 }, 1.0 };
+        return { { 48, 52, 55 }, 1.5 };
+    }
     if (cat == "Bass")  return { { 36 }, 1.5 };
     if (cat == "Lead")  return { { 60 }, 1.5 };
     if (cat == "Flute") return { { 72 }, 1.5 };
@@ -24,6 +34,12 @@ static Spec specFor (const juce::String& cat)
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
+    // never read the user's own SysEx banks / ROM sets: empty throw-away folders
+    auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("cohesion_presetrender");
+    tmp.createDirectory();
+    _putenv_s ("COHESION_SYNTH_SYSEX_DIR", tmp.getChildFile ("sysex").getFullPathName().toRawUTF8());
+    _putenv_s ("COHESION_SYNTH_PRESET_DIR", tmp.getChildFile ("presets").getFullPathName().toRawUTF8());
+    _putenv_s ("COHESION_SYNTH_ROM_DIR",   tmp.getChildFile ("roms").getFullPathName().toRawUTF8());
     const juce::File gainsFile (argc > 1 ? juce::String (argv[1]) : juce::String());
     const auto& presets = cohesionSynthPresets();
     const float target = -18.0f;

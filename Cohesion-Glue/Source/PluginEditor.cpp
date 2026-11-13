@@ -18,6 +18,7 @@ CohesionAudioProcessorEditor::CohesionAudioProcessorEditor (CohesionAudioProcess
     subtitle.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::plain).withExtraKerningFactor (0.10f));
     subtitle.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.55f));
     content.addAndMakeVisible (subtitle);
+    content.addChildComponent (updateBadge);
 
     // ---- preset menu + nav + A/B + save ----
     presetLabel.setText ("PRESET", juce::dontSendNotification);
@@ -313,6 +314,7 @@ void CohesionAudioProcessorEditor::layoutContent()
     auto header = b.removeFromTop (72);
     title.setBounds    (header.getX(), header.getY() + 8,  220, 26);
     subtitle.setBounds (header.getX(), header.getY() + 29, 160, 16);
+    updateBadge.placeAfter (subtitle);
 
     // right: MAGIC + Amount
     auto rc = header.removeFromRight (230);

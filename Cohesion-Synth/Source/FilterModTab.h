@@ -203,9 +203,9 @@ struct LfoPanel : Card
 {
     juce::AudioProcessorValueTreeState& apvts;
     juce::TextButton sel[4];
-    juce::ComboBox waveBox;
+    juce::ComboBox waveBox, divBox;
     juce::ToggleButton syncBtn, monoBtn;
-    std::unique_ptr<ComboAtt> waveAtt;
+    std::unique_ptr<ComboAtt> waveAtt, divAtt;
     std::unique_ptr<ButtonAtt> syncAtt, monoAtt;
     juce::OwnedArray<LabeledKnob> knobs;
     int cur = 0;
@@ -222,6 +222,8 @@ struct LfoPanel : Card
         addAndMakeVisible (waveBox);
         syncBtn.setButtonText ("SYNC"); addAndMakeVisible (syncBtn);
         monoBtn.setButtonText ("MONO"); addAndMakeVisible (monoBtn);
+        addChildComponent (divBox);
+        syncBtn.onClick = [this] { updateSync(); };
         build (0);
     }
 
@@ -234,6 +236,9 @@ struct LfoPanel : Card
         waveAtt = std::make_unique<ComboAtt> (apvts, pid::lfoWave (lfo), waveBox);
         syncAtt = std::make_unique<ButtonAtt> (apvts, pid::lfoSync (lfo), syncBtn);
         monoAtt = std::make_unique<ButtonAtt> (apvts, pid::lfoMono (lfo), monoBtn);
+        divBox.clear (juce::dontSendNotification);
+        divBox.addItemList ({ "1/1", "1/2", "1/4", "1/8", "1/16", "1/32" }, 1);
+        divAtt = std::make_unique<ComboAtt> (apvts, pid::lfoDiv (lfo), divBox);
 
         knobs.clear (true);
         auto add = [&] (const juce::String& id, const juce::String& nm) { auto* k = new LabeledKnob (apvts, id, nm); knobs.add (k); addAndMakeVisible (k); };
@@ -245,6 +250,15 @@ struct LfoPanel : Card
             sel[i].setColour (juce::TextButton::textColourOffId, i == n ? juce::Colour (0xffeafff6) : juce::Colour (0xff9fb0aa));
         }
         resized();
+        updateSync();
+    }
+
+    // SYNC: the RATE knob makes way for a note value (1/1 ... 1/32 per LFO cycle)
+    void updateSync()
+    {
+        const bool sync = syncBtn.getToggleState();
+        if (knobs.size() > 0) knobs[0]->setVisible (! sync);
+        divBox.setVisible (sync);
     }
 
     void resized() override
@@ -264,6 +278,7 @@ struct LfoPanel : Card
         r.removeFromTop (8);
         const int cw = r.getWidth() / juce::jmax (1, knobs.size());
         for (int i = 0; i < knobs.size(); ++i) knobs[i]->setBounds (r.getX() + i * cw, r.getY(), cw, r.getHeight());
+        divBox.setBounds (juce::Rectangle<int> (r.getX(), r.getY(), cw, r.getHeight()).withSizeKeepingCentre (cw - 12, 28));
     }
 };
 

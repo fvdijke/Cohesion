@@ -194,6 +194,7 @@ LaFontEditor::LaFontEditor (LaFontProcessor& p) : juce::AudioProcessorEditor (&p
     fontBtn.setTooltip ("Add or remove SoundFonts");
     fontBtn.onClick = [this] { showFontMenu(); };
     canvas.addAndMakeVisible (fontBtn);
+    canvas.addChildComponent (updateBadge);
     canvas.addAndMakeVisible (midiLed);
     master = std::make_unique<Knob> (a, fpid::master, "MASTER", false);
     canvas.addAndMakeVisible (*master);
@@ -287,6 +288,7 @@ void LaFontEditor::bindFx()
 void LaFontEditor::layout()
 {
     fontBtn.setBounds (340, 24, 140, 28);
+    updateBadge.placeAt (496, 31);          // header, right of the SF2 button
     midiLed.setBounds (1300, 26, 16, 22);
     master->setBounds (1330, 10, 52, 50);
     helpBtn.setBounds (1396, 22, 24, 24);

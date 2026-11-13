@@ -2,6 +2,7 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
+#include "CohesionUpdateCheck.h"
 #include "LookAndFeel.h"
 #include "Params.h"
 
@@ -51,11 +52,11 @@ struct OscPanel : juce::Component
 {
     int idx;
     bool dimmed = false;
-    void setDimmed (bool d) { if (d == dimmed) return; dimmed = d; setPanelDimmed (*this, onBtn, d); repaint(); }
+    void setDimmed (bool d) { if (d == dimmed) return; dimmed = d; setPanelDimmed (*this, onBtn, d); updateMode(); }
     juce::ToggleButton onBtn;
-    juce::ComboBox modeBox, waveBox;
+    juce::ComboBox modeBox, waveBox, bankBox;
     std::unique_ptr<ButtonAtt> onAtt;
-    std::unique_ptr<ComboAtt>  modeAtt, waveAtt;
+    std::unique_ptr<ComboAtt>  modeAtt, waveAtt, bankAtt;
     juce::OwnedArray<LabeledKnob> knobs;
 
     OscPanel (juce::AudioProcessorValueTreeState& apvts, int i) : idx (i)
@@ -72,12 +73,30 @@ struct OscPanel : juce::Component
         addAndMakeVisible (waveBox);
         waveAtt = std::make_unique<ComboAtt> (apvts, pid::oscWave (i), waveBox);
 
+        bankBox.addItemList (pid::wtBankNames(), 1);
+        addChildComponent (bankBox);
+        bankAtt = std::make_unique<ComboAtt> (apvts, pid::oscWtBank (i), bankBox);
+
         auto add = [&] (const juce::String& id, const juce::String& nm)
         { auto* k = new LabeledKnob (apvts, id, nm); knobs.add (k); addAndMakeVisible (k); };
 
         add (pid::oscOct (i),  "OCT");   add (pid::oscSemi (i), "SEMI");   add (pid::oscFine (i),  "FINE");
         add (pid::oscWtPos (i),"WT POS");add (pid::oscUni (i),  "UNISON"); add (pid::oscDet (i),   "DETUNE");
         add (pid::oscPan (i),  "PAN");   add (pid::oscLevel (i),"LEVEL");  add (pid::oscPhase (i), "PHASE");
+
+        // VA: the wave box picks the waveform; WT: the bank box (same place) picks the
+        // wavetable bank and WT POS morphs through it
+        modeBox.onChange = [this] { updateMode(); };
+        updateMode();
+    }
+
+    void updateMode()
+    {
+        const bool wt = modeBox.getSelectedId() == 2;
+        waveBox.setVisible (! wt);
+        bankBox.setVisible (wt);
+        if (knobs.size() > 3) knobs[3]->setAlpha (dimmed ? 0.38f : (wt ? 1.0f : 0.38f));   // WT POS
+        repaint();
     }
 
     void paint (juce::Graphics& g) override
@@ -102,6 +121,7 @@ struct OscPanel : juce::Component
         modeBox.setBounds (combos.removeFromLeft (combos.getWidth() / 2 - 4));
         combos.removeFromLeft (8);
         waveBox.setBounds (combos);
+        bankBox.setBounds (combos);
         r.removeFromTop (10);
         const int cols = 3, rows = 3;
         const int cw = r.getWidth() / cols;
@@ -165,7 +185,7 @@ struct MiniPanel : juce::Component
 };
 
 // ---------------------------------------------------------------------------
-//  MIXER: 6 faders (OSC1-4, SUB, NOISE) + FM / RING knobs.
+//  LEVELS: 6 faders (OSC1-4, SUB, NOISE) + FM / RING knobs.
 // ---------------------------------------------------------------------------
 struct MixerPanel : juce::Component
 {
@@ -179,9 +199,16 @@ struct MixerPanel : juce::Component
         stripDim[i] = d; faders[i]->setAlpha (d ? 0.38f : 1.0f); repaint();
     }
     std::unique_ptr<LabeledKnob> fmKnob, ringKnob;
+    juce::TextButton loadBtn { "LOAD VA..." };     // load a sound into the VA part only
+    std::function<void()> onLoad;
 
     MixerPanel (juce::AudioProcessorValueTreeState& apvts)
     {
+        loadBtn.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff0f6e56));
+        loadBtn.setColour (juce::TextButton::textColourOffId, juce::Colour (0xffeafff6));
+        loadBtn.setTooltip ("Load a sound into the VA part only (FM, LA, MIXER, FX and ARP stay)");
+        loadBtn.onClick = [this] { if (onLoad) onLoad(); };
+        addAndMakeVisible (loadBtn);
         auto addFader = [&] (const juce::String& id, const juce::String& lab)
         {
             auto* f = new juce::Slider();
@@ -206,7 +233,7 @@ struct MixerPanel : juce::Component
         g.setColour (juce::Colours::white.withAlpha (0.08f)); g.drawRoundedRectangle (r, 7.0f, 1.0f);
         g.setColour (juce::Colour (0xff5dcaa5));
         g.setFont (juce::Font ("Segoe UI", 11.0f, juce::Font::bold));
-        g.drawText ("MIXER", 16, 10, 120, 16, juce::Justification::centredLeft);
+        g.drawText ("LEVELS", 16, 10, 120, 16, juce::Justification::centredLeft);
         g.setColour (juce::Colour (0xff9fe1cb));
         g.setFont (juce::Font ("Segoe UI", 9.0f, juce::Font::plain));
         for (int i = 0; i < labels.size(); ++i)
@@ -219,6 +246,7 @@ struct MixerPanel : juce::Component
 
     void resized() override
     {
+        loadBtn.setBounds (getWidth() - 14 - 100, 6, 100, 22);
         auto r = getLocalBounds().reduced (14);
         r.removeFromTop (24);
         auto right = r.removeFromRight (150);
@@ -273,6 +301,7 @@ struct MidiLed : juce::Component
 
 #include "FilterModTab.h"
 #include "FxTab.h"
+#include "MixerTab.h"
 #include "LibraryOverlay.h"
 #include "ArpTab.h"
 #include "FmTab.h"
@@ -303,19 +332,25 @@ private:
 public:
     void showTab (int t);          // public so the offline UI snapshot can switch tabs
     void openLibrary() { library->open(); }
+    LibraryOverlay* getLibrary() { return library.get(); }
     void updateDimming();
+    int  getCurrentTab() const { return currentTab; }
+    void presetLoaded();           // after a preset was loaded: name + the tab of its engine
+    void openSaveDialog();         // SAVE: name the current sound as a User preset
 private:
     void updatePresetName();
+    void saveAs (const juce::String& name, bool overwrite);
 
     CohesionSynthAudioProcessor& proc;
     CohesionLookAndFeel lnf;
     static constexpr int kW = 1040, kH = 720;
     Canvas canvas;
+    cohesion::UpdateBadge updateBadge;   // UPDATE AVAILABLE (start-up version check)
     bool sizeRestored = false;
     void paintCanvas (juce::Graphics&);
     void layoutCanvas();
 
-    static constexpr int kNumTabs = 6;   // OSC/MIX, FM, LA, FILTER/MOD, FX, ARP
+    static constexpr int kNumTabs = 7;   // OSC/MIX, FM, LA, FILTER/MOD, FX, ARP, MIXER
     juce::TextButton tabs[kNumTabs];
     int currentTab = 0;
 
@@ -330,12 +365,20 @@ private:
     std::unique_ptr<FilterModTab>     filterTab;
     std::unique_ptr<FxTab>            fxTab;
     std::unique_ptr<ArpTab>           arpTab;
+    std::unique_ptr<MixerTab>         mixerTab;
 
     MidiLed midiLed;
-    std::unique_ptr<LabeledKnob> mainKnob;
-    juce::TextButton presetPrev { "<" }, presetNext { ">" }, libraryBtn { "LIBRARY" };
+    std::unique_ptr<LabeledKnob> mainKnob, glideKnob, velKnob;
+    juce::ComboBox voiceModeBox;
+    std::unique_ptr<ComboAtt> voiceModeAtt;
+    juce::TextButton presetPrev { "<" }, presetNext { ">" }, libraryBtn { "LIBRARY" }, saveBtn { "SAVE" };
     std::unique_ptr<LibraryOverlay> library;
-    juce::Label presetName;
+    struct ClickLabel : juce::Label   // the preset name: a click opens the LIBRARY
+    {
+        std::function<void()> onClick;
+        void mouseUp (const juce::MouseEvent& e) override { if (onClick && e.mouseWasClicked()) onClick(); }
+    };
+    ClickLabel presetName;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CohesionSynthAudioProcessorEditor)
 };

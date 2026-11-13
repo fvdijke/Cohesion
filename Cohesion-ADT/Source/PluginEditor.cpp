@@ -18,6 +18,7 @@ CohesionADTAudioProcessorEditor::CohesionADTAudioProcessorEditor (CohesionADTAud
     lab (subtitle, "by Pepperwood", 11.0f, juce::Colours::white.withAlpha (0.55f), juce::Justification::centredLeft);
     lab (subcap,   "Artificial Double Tracking", 10.0f, juce::Colour (0xff6c7a74), juce::Justification::centredLeft);
 
+    addChildComponent (updateBadge);
     addAndMakeVisible (viz);
 
     // preset selector
@@ -132,6 +133,7 @@ void CohesionADTAudioProcessorEditor::resized()
 {
     title.setBounds    (22, 26, 300, 26);
     subtitle.setBounds (22, 47, 180, 16);
+    updateBadge.placeAfter (subtitle);
     subcap.setBounds   (330, 46, 220, 14);
 
     prevBtn.setBounds   (500, 30, 24, 30);

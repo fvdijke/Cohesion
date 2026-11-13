@@ -39,6 +39,21 @@ target_sources(PresetRender PRIVATE PresetRender.cpp ../Source/PluginProcessor.c
 target_compile_definitions(PresetRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
 target_link_libraries(PresetRender PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
 
+juce_add_console_app(SwitchTest PRODUCT_NAME "SwitchTest")
+target_sources(SwitchTest PRIVATE SwitchTest.cpp ../Source/PluginProcessor.cpp ../Source/PluginEditor.cpp)
+target_compile_definitions(SwitchTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(SwitchTest PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(VoiceTest PRODUCT_NAME "VoiceTest")
+target_sources(VoiceTest PRIVATE VoiceTest.cpp ../Source/PluginProcessor.cpp ../Source/PluginEditor.cpp)
+target_compile_definitions(VoiceTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(VoiceTest PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
+
+juce_add_console_app(AuditCheck PRODUCT_NAME "AuditCheck")
+target_sources(AuditCheck PRIVATE AuditCheck.cpp ../Source/PluginProcessor.cpp ../Source/PluginEditor.cpp)
+target_compile_definitions(AuditCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0)
+target_link_libraries(AuditCheck PRIVATE juce::juce_audio_utils juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
+
 juce_add_console_app(FmTest PRODUCT_NAME "FmTest")
 target_sources(FmTest PRIVATE FmTest.cpp)
 target_compile_definitions(FmTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
@@ -61,3 +76,13 @@ if(EXISTS "${MUNT_DIR}/CMakeLists.txt")
     target_compile_definitions(LaCompare PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(LaCompare PRIVATE MT32Emu::mt32emu juce::juce_audio_formats juce::juce_dsp PUBLIC juce::juce_recommended_config_flags)
 endif()
+
+# Targets that compile the editor need the shared update-check header (../../Common).
+# Only UiSnapshot gets an app id + version, so it can render the UPDATE AVAILABLE badge;
+# the others never go online. Test a lower version with -DCOHESION_VERSION_OVERRIDE=1.0.0.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../Common/CohesionVersion.cmake")
+cohesion_app_version(synth SYNTH_APP_VER)
+cohesion_update_check(UiSnapshot synth ${SYNTH_APP_VER})
+foreach(t PresetRender SwitchTest VoiceTest AuditCheck)
+    cohesion_update_check(${t})
+endforeach()

@@ -1,0 +1,14 @@
+{
+  "_info": "Single source of truth for the COHESION versions. CMake reads each app's version from here at configure time; every app fetches this file from GitHub (master) at start-up and shows UPDATE AVAILABLE when its own entry is newer than the version it was built with. Bump an entry, rebuild that app, push.",
+  "suite": "1.4.0",
+  "apps": {
+    "glue":      "1.4.0",
+    "eqcomp":    "1.4.0",
+    "adt":       "1.4.0",
+    "transient": "1.4.0",
+    "synth":     "1.4.0",
+    "lafont":    "1.4.0",
+    "lamodule":  "1.4.0",
+    "sysex":     "1.4.0"
+  }
+}

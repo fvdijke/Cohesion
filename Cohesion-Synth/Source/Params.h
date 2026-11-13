@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -10,19 +11,37 @@
 // ===========================================================================
 namespace pid
 {
+    namespace detail
+    {
+        // IDs with an index are built once per function (no string building on the audio thread)
+        template <int Lo, int N>
+        inline std::array<juce::String, (size_t) N> makeIds (const char* pre, const char* post)
+        {
+            std::array<juce::String, (size_t) N> a;
+            for (int k = 0; k < N; ++k) a[(size_t) k] = juce::String (pre) + juce::String (Lo + k) + post;
+            return a;
+        }
+    }
     // --- oscillator (i = 1..4) ---
-    inline juce::String oscOn    (int i) { return "osc" + juce::String (i) + "_on"; }
-    inline juce::String oscMode  (int i) { return "osc" + juce::String (i) + "_mode"; }
-    inline juce::String oscWave  (int i) { return "osc" + juce::String (i) + "_wave"; }
-    inline juce::String oscOct   (int i) { return "osc" + juce::String (i) + "_oct"; }
-    inline juce::String oscSemi  (int i) { return "osc" + juce::String (i) + "_semi"; }
-    inline juce::String oscFine  (int i) { return "osc" + juce::String (i) + "_fine"; }
-    inline juce::String oscWtPos (int i) { return "osc" + juce::String (i) + "_wtpos"; }
-    inline juce::String oscUni   (int i) { return "osc" + juce::String (i) + "_unison"; }
-    inline juce::String oscDet   (int i) { return "osc" + juce::String (i) + "_detune"; }
-    inline juce::String oscPan   (int i) { return "osc" + juce::String (i) + "_pan"; }
-    inline juce::String oscLevel (int i) { return "osc" + juce::String (i) + "_level"; }
-    inline juce::String oscPhase (int i) { return "osc" + juce::String (i) + "_phase"; }
+    inline const juce::String& oscOn (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_on"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscMode (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_mode"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscWave (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_wave"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscOct (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_oct"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscSemi (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_semi"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscFine (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_fine"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscWtPos (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_wtpos"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::StringArray& wtBankNames()   // must match syn::Wavetables (B banks)
+    {
+        static const juce::StringArray n { "Analog", "PWM", "Harmonic", "Vocal", "Sync", "FM",
+                                           "Fold", "Organ", "Odd/Even", "Comb", "Chip", "Digital" };
+        return n;
+    }
+    inline const juce::String& oscWtBank (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_wtbank"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscUni (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_unison"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscDet (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_detune"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscPan (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_pan"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscLevel (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_level"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
+    inline const juce::String& oscPhase (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_phase"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
 
     // --- sub / noise ---
     static const char* subOn    = "sub_on";
@@ -65,31 +84,31 @@ namespace pid
 
     // --- envelopes (1 = AMP) ---
     static const char* ampA = "amp_a", *ampD = "amp_d", *ampS = "amp_s", *ampR = "amp_r";
-    inline juce::String envA (int n) { return "env" + juce::String (n) + "_a"; }
-    inline juce::String envD (int n) { return "env" + juce::String (n) + "_d"; }
-    inline juce::String envS (int n) { return "env" + juce::String (n) + "_s"; }
-    inline juce::String envR (int n) { return "env" + juce::String (n) + "_r"; }
+    inline const juce::String& envA (int n) { static const auto t = detail::makeIds<1, 4> ("env", "_a"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& envD (int n) { static const auto t = detail::makeIds<1, 4> ("env", "_d"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& envS (int n) { static const auto t = detail::makeIds<1, 4> ("env", "_s"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& envR (int n) { static const auto t = detail::makeIds<1, 4> ("env", "_r"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
 
     // --- LFOs (n = 1..4) ---
-    inline juce::String lfoWave   (int n) { return "lfo" + juce::String (n) + "_wave"; }
-    inline juce::String lfoRate   (int n) { return "lfo" + juce::String (n) + "_rate"; }
-    inline juce::String lfoSync   (int n) { return "lfo" + juce::String (n) + "_sync"; }
-    inline juce::String lfoDiv    (int n) { return "lfo" + juce::String (n) + "_div"; }
-    inline juce::String lfoFade   (int n) { return "lfo" + juce::String (n) + "_fade"; }
-    inline juce::String lfoPhase  (int n) { return "lfo" + juce::String (n) + "_phase"; }
-    inline juce::String lfoSmooth (int n) { return "lfo" + juce::String (n) + "_smooth"; }
-    inline juce::String lfoMono   (int n) { return "lfo" + juce::String (n) + "_mono"; }
+    inline const juce::String& lfoWave (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_wave"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoRate (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_rate"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoSync (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_sync"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoDiv (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_div"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoFade (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_fade"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoPhase (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_phase"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoSmooth (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_smooth"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
+    inline const juce::String& lfoMono (int n) { static const auto t = detail::makeIds<1, 4> ("lfo", "_mono"); return t[(size_t) juce::jlimit (0, 3, n - 1)]; }
 
     // --- mod matrix (slot = 0..7) ---
-    inline juce::String modSrc (int s) { return "mod" + juce::String (s) + "_src"; }
-    inline juce::String modDst (int s) { return "mod" + juce::String (s) + "_dst"; }
-    inline juce::String modAmt (int s) { return "mod" + juce::String (s) + "_amt"; }
+    inline const juce::String& modSrc (int s) { static const auto t = detail::makeIds<0, 8> ("mod", "_src"); return t[(size_t) juce::jlimit (0, 7, s - 0)]; }
+    inline const juce::String& modDst (int s) { static const auto t = detail::makeIds<0, 8> ("mod", "_dst"); return t[(size_t) juce::jlimit (0, 7, s - 0)]; }
+    inline const juce::String& modAmt (int s) { static const auto t = detail::makeIds<0, 8> ("mod", "_amt"); return t[(size_t) juce::jlimit (0, 7, s - 0)]; }
 
     static const juce::StringArray modSources { "Off", "LFO 1", "LFO 2", "LFO 3", "LFO 4",
                                                 "ENV 1", "ENV 2", "ENV 3", "ENV 4",
                                                 "Velocity", "Mod Wheel", "Key Track" };
     static const juce::StringArray modDests   { "Off", "Filter 1 Cutoff", "Filter 2 Cutoff",
-                                                "Pitch", "Amp", "Pan", "LFO 1 Rate" };
+                                                "Pitch", "Amp", "Pan", "LFO 1 Rate", "WT Pos" };
 
     // --- FX ---
     static const char* compOn = "fx_comp_on", *compThresh = "fx_comp_thresh", *compRatio = "fx_comp_ratio", *compAtk = "fx_comp_attack",
@@ -111,6 +130,7 @@ namespace pid
     static const char* dxOn = "dx_on", *dxLevel = "dx_level", *dxBright = "dx_bright", *dxTime = "dx_time", *dxVel = "dx_vel";
 
     // --- LA engine (MT-32 / CM-32L) ---
+    static const char* vaOn = "va_on", *vaFiltMod = "va_filtmod";   // VA part: on, through its filters + mod matrix
     static const char* laOn = "la_on", *laLevel = "la_level", *laCutoff = "la_cutoff", *laTime = "la_time";
 
     // --- ARP ---
@@ -118,14 +138,42 @@ namespace pid
                      * arpGate = "arp_gate", *arpSwing = "arp_swing", *arpRandom = "arp_random", *arpSync = "arp_sync",
                      * arpHold = "arp_hold", *arpLatch = "arp_latch", *arpTempo = "arp_tempo", *arpSteps = "arp_steps",
                      * arpOrder = "arp_order", *arpVelAmt = "arp_velamt", *arpSlide = "arp_slide", *arpHuman = "arp_humanize";
-    inline juce::String arpStepOn  (int i) { return "arp_s" + juce::String (i) + "_on"; }
-    inline juce::String arpStepVel (int i) { return "arp_s" + juce::String (i) + "_vel"; }
+    inline const juce::String& arpStepOn (int i) { static const auto t = detail::makeIds<0, 16> ("arp_s", "_on"); return t[(size_t) juce::jlimit (0, 15, i - 0)]; }
+    inline const juce::String& arpStepVel (int i) { static const auto t = detail::makeIds<0, 16> ("arp_s", "_vel"); return t[(size_t) juce::jlimit (0, 15, i - 0)]; }
     static const juce::StringArray arpModes  { "Up", "Down", "Up / Down", "Down / Up", "Random", "Chord" };
     static const juce::StringArray arpRates  { "1/4", "1/8", "1/8 T", "1/16", "1/16 T", "1/32" };
     static const juce::StringArray arpOrders { "As Played", "Low > High", "High > Low" };
 
     // --- global ---
     static const char* mainVol = "main_vol";
+    static const char* voiceMode = "voice_mode";   // Poly / Mono / Legato
+    static const char* glide     = "glide_ms";     // portamento time
+    static const char* velSens   = "vel_sens";     // velocity -> level
+
+    // --- MIXER: the three parts of a multi sound (p = 0 VA, 1 FM, 2 LA) ---
+    enum Part { kVA = 0, kFM = 1, kLA = 2, kNumParts = 3 };
+    static const juce::StringArray partNames { "VA", "FM", "LA" };
+    inline const juce::String& partLevel  (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_level");  return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partPan    (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_pan");    return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partMute   (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_mute");   return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partSolo   (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_solo");   return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partEcho   (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_echo");   return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partReverb (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_reverb"); return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partKeyLo  (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_keylo");  return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partKeyHi  (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_keyhi");  return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partArp    (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_arp");    return t[(size_t) juce::jlimit (0, 2, p)]; }
+    inline const juce::String& partFilter (int p) { static const auto t = detail::makeIds<1, 3> ("part", "_filter"); return t[(size_t) juce::jlimit (0, 2, p)]; }
+
+    // Which part a parameter belongs to (what a "load into this part" replaces):
+    // kVA / kFM / kLA, or -1 for the shared ones (MIXER, FX, ARP, MAIN, VOICE, GLIDE, VELOCITY).
+    inline int partOfParam (const juce::String& id)
+    {
+        if (id.startsWith ("dx_")) return kFM;
+        if (id.startsWith ("la_")) return kLA;
+        if (id.startsWith ("fx_") || id.startsWith ("arp") || id.startsWith ("part")
+            || id == mainVol || id == voiceMode || id == glide || id == velSens) return -1;
+        return kVA;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -182,6 +230,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
         p.push_back (makeFloat  (ParameterID { pid::oscFine (i), 1 }, "OSC " + String (i) + " Fine",
                                                              NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f, "ct"));
         p.push_back (makeFloat  (ParameterID { pid::oscWtPos (i), 1 }, "OSC " + String (i) + " WT Pos", pct (0.0f), 0.0f));
+        p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::oscWtBank (i), 1 }, "OSC " + String (i) + " WT Bank",
+                                                             pid::wtBankNames(), 0));
         p.push_back (std::make_unique<AudioParameterInt>    (ParameterID { pid::oscUni (i), 1 }, "OSC " + String (i) + " Unison", 1, 7, 1));
         p.push_back (makeFloat  (ParameterID { pid::oscDet (i), 1 }, "OSC " + String (i) + " Detune",
                                                              NormalisableRange<float> (0.0f, 100.0f, 0.1f), 18.0f, "ct"));
@@ -342,6 +392,10 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     fl (pid::dxTime,   "FM Env Time",   skw (0.25f, 4.0f, 0.5f), 1.0f, "x");
     fl (pid::dxVel,    "FM Velocity",   lin (0.0f, 2.0f), 1.0f, "x");
 
+    // ---------------- VA part switches (MIXER) ----------------
+    on (pid::vaOn, "VA On", true);
+    on (pid::vaFiltMod, "VA Filter + Mod", true);
+
     // ---------------- LA engine ----------------
     on (pid::laOn, "LA On", false);
     fl (pid::laLevel,  "LA Level",  lin (0.0f, 1.0f), 0.8f);
@@ -373,6 +427,29 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout cohesionSynthLayout()
     }
 
     p.push_back (makeFloat (ParameterID { pid::mainVol, 1 }, "Main", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.8f));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { pid::voiceMode, 1 }, "Voice Mode", StringArray { "POLY", "MONO", "LEGATO" }, 0));
+    p.push_back (makeFloat (ParameterID { pid::glide, 1 }, "Glide", NormalisableRange<float> (0.0f, 2000.0f, 0.0f, 0.35f), 0.0f, "ms"));
+    p.push_back (makeFloat (ParameterID { pid::velSens, 1 }, "Velocity", NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.7f));
+
+    // MIXER (defaults = a single sound as before: 0 dB, centre, full sends, whole keyboard)
+    auto noteName = [] (int v, int) { return MidiMessage::getMidiNoteName (v, true, true, 4); };
+    for (int k = 0; k < pid::kNumParts; ++k)
+    {
+        const String nm = "Part " + pid::partNames[k] + " ";
+        NormalisableRange<float> lvl (-60.0f, 18.0f, 0.1f); lvl.setSkewForCentre (-12.0f);
+        p.push_back (makeFloat (ParameterID { pid::partLevel (k), 1 }, nm + "Level", lvl, 0.0f, "dB"));
+        p.push_back (makeFloat (ParameterID { pid::partPan (k), 1 }, nm + "Pan", bipol(), 0.0f));
+        p.push_back (std::make_unique<AudioParameterBool> (ParameterID { pid::partMute (k), 1 }, nm + "Mute", false));
+        p.push_back (std::make_unique<AudioParameterBool> (ParameterID { pid::partSolo (k), 1 }, nm + "Solo", false));
+        p.push_back (makeFloat (ParameterID { pid::partEcho (k), 1 },   nm + "Echo Send",   pct (0.0f), 1.0f));
+        p.push_back (makeFloat (ParameterID { pid::partReverb (k), 1 }, nm + "Reverb Send", pct (0.0f), 1.0f));
+        p.push_back (std::make_unique<AudioParameterInt> (ParameterID { pid::partKeyLo (k), 1 }, nm + "Key Low", 0, 127, 0,
+                                                          AudioParameterIntAttributes().withStringFromValueFunction (noteName)));
+        p.push_back (std::make_unique<AudioParameterInt> (ParameterID { pid::partKeyHi (k), 1 }, nm + "Key High", 0, 127, 127,
+                                                          AudioParameterIntAttributes().withStringFromValueFunction (noteName)));
+        p.push_back (std::make_unique<AudioParameterBool> (ParameterID { pid::partArp (k), 1 }, nm + "Arp", true));
+        p.push_back (std::make_unique<AudioParameterBool> (ParameterID { pid::partFilter (k), 1 }, nm + "Via VA Filter + Mod", false));
+    }
 
     return { p.begin(), p.end() };
 }

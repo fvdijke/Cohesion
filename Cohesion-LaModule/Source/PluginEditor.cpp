@@ -153,6 +153,7 @@ LaModuleEditor::LaModuleEditor (LaModuleProcessor& p) : juce::AudioProcessorEdit
         if (label.isNotEmpty() && label != proc.currentRomLabel()) { proc.setRom (label); status.clear(); refreshAll(); }
     };
     canvas.addAndMakeVisible (romBox);
+    canvas.addChildComponent (updateBadge);
     canvas.addAndMakeVisible (midiLed);
     master = std::make_unique<Knob> (a, lpid::master, "MASTER", false);
     canvas.addAndMakeVisible (*master);
@@ -268,6 +269,7 @@ void LaModuleEditor::layout()
     // header
     romBtn.setBounds (300, 25, 96, 26);
     romBox.setBounds (404, 27, 170, 22);
+    updateBadge.placeAt (590, 31);          // header, right of the ROM picker
     midiLed.setBounds (850, 26, 16, 22);
     master->setBounds (926, 12, 52, 48);
     helpBtn.setBounds (996, 22, 24, 24);

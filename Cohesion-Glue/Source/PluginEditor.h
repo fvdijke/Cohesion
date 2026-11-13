@@ -6,6 +6,7 @@
 #include <functional>
 #include <cmath>
 #include "PluginProcessor.h"
+#include "CohesionUpdateCheck.h"
 
 #define COHESION_VERSION "v1.0"
 
@@ -547,6 +548,7 @@ private:
 
     // header
     juce::Label title, subtitle;
+    cohesion::UpdateBadge updateBadge;   // UPDATE AVAILABLE (start-up version check)
     juce::Label presetLabel;
     juce::ComboBox presetBox;
     juce::TextButton prevBtn { "<" }, nextBtn { ">" }, abBtn { "A" }, saveBtn { "Save" };

@@ -3,7 +3,10 @@ cmake_minimum_required(VERSION 3.22)
 # COHESION - SYSEX: DX7 bank builder (standalone app) + offline round-trip test.
 #   cmake -S . -B build && cmake --build build --config Release
 # Optional: -DCOHESION_JUCE_DIR=<path to a JUCE 7.0.12 source tree>
-project(CohesionSysEx VERSION 0.1.0 LANGUAGES C CXX)
+# Version comes from <repo>/versions.json (see Common/CohesionVersion.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../Common/CohesionVersion.cmake")
+cohesion_app_version(sysex COHESION_APP_VER)
+project(CohesionSysEx VERSION ${COHESION_APP_VER} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,6 +49,10 @@ target_compile_definitions(CohesionSysEx PRIVATE
     JUCE_DISPLAY_SPLASH_SCREEN=0
     JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:CohesionSysEx,JUCE_PRODUCT_NAME>"
     JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:CohesionSysEx,JUCE_VERSION>")
+
+# start-up update check (UPDATE AVAILABLE in the header)
+cohesion_update_check(CohesionSysEx sysex)
+
 target_link_libraries(CohesionSysEx
     PRIVATE
         juce::juce_audio_utils

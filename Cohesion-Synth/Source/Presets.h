@@ -8,6 +8,7 @@
 #include <memory>
 #include "ArpPatterns.h"
 #include "PresetGen.h"
+#include "GmBank.h"
 #include "PresetGains.h"
 #include <unordered_map>
 
@@ -23,6 +24,8 @@ struct SynthPreset
     std::shared_ptr<const dx7::Patch> fm;     // imported DX7 voice (v is then empty)
     std::shared_ptr<const la32::Rom> la;      // MT-32 / CM-32L timbre from an imported ROM set
     int laIndex = -1; bool laRhythm = false;
+    juce::File userFile;                      // user preset: the full plugin state in this file
+    int userParts = 0;                        // user preset: bit k set = part k (VA / FM / LA) sounds in it
 };
 
 // Base settings for an LA (MT-32 / CM-32L) timbre: LA engine only, filters open.
@@ -30,19 +33,17 @@ inline const SynthPreset& laInitPreset()
 {
     static const SynthPreset p { "LA", "Init", {
         { pid::oscOn (1), 0 }, { pid::oscOn (2), 0 }, { pid::laOn, 1 }, { pid::laLevel, 0.8f },
-        { pid::fltCutoff, 20000 }, { pid::fltRes, 0.0f },
-        { pid::ampA, 1 }, { pid::ampD, 1 }, { pid::ampS, 1.0f }, { pid::ampR, 8000 } }, nullptr };
+        { pid::fltCutoff, 20000 }, { pid::fltRes, 0.0f } }, nullptr };
     return p;
 }
 
 // Base settings for an imported DX7 voice: FM engine only, filters open,
-// the amp envelope out of the way (the operator envelopes shape the sound).
+// the operator envelopes shape the sound (the AMP envelope only shapes an added VA layer).
 inline const SynthPreset& dxInitPreset()
 {
     static const SynthPreset p { "FM", "Init", {
         { pid::oscOn (1), 0 }, { pid::oscOn (2), 0 }, { pid::dxOn, 1 }, { pid::dxLevel, 0.8f },
-        { pid::fltCutoff, 20000 }, { pid::fltRes, 0.0f },
-        { pid::ampA, 1 }, { pid::ampD, 1 }, { pid::ampS, 1.0f }, { pid::ampR, 8000 } }, nullptr };
+        { pid::fltCutoff, 20000 }, { pid::fltRes, 0.0f } }, nullptr };
     return p;
 }
 
@@ -443,6 +444,11 @@ inline std::vector<SynthPreset> buildSynthPresets()
         if (taken.size() < 100)
             pgen::generate (cat, 100 - taken.size(), taken, out);
     }
+
+    // =====================================================================
+    //  General MIDI bank (128 programs, "GM · <family>")
+    // =====================================================================
+    gm::addBank (out);
 
     // ---- loudness matching (measured offline by tests/PresetRender) ----
     static const std::unordered_map<std::string, std::pair<float, float>> levels = []

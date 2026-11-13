@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "CohesionUpdateCheck.h"
 #include "LookAndFeel.h"
 
 using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -235,6 +236,7 @@ private:
     ModuleLookAndFeel lnf;
     static constexpr int kW = 1040, kH = 660;
     Canvas canvas;
+    cohesion::UpdateBadge updateBadge;   // UPDATE AVAILABLE (start-up version check)
     bool sizeRestored = false;
     int selected = 0;
 

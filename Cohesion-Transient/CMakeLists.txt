@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(CohesionTransient VERSION 0.1.0 LANGUAGES C CXX)
+# Version comes from <repo>/versions.json (see Common/CohesionVersion.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../Common/CohesionVersion.cmake")
+cohesion_app_version(transient COHESION_APP_VER)
+project(CohesionTransient VERSION ${COHESION_APP_VER} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,6 +49,9 @@ target_compile_definitions(CohesionTransient PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
+
+# start-up update check (UPDATE AVAILABLE in the header)
+cohesion_update_check(CohesionTransient transient)
 
 target_link_libraries(CohesionTransient
     PRIVATE

@@ -11,7 +11,7 @@ LA MODULE and LA FONT are the separate, LGPL-licensed Munt and FluidSynth librar
 | **COHESION — EQ/COMP** | Parametric EQ (TPT/ZDF) + flexible multiband dynamics + brick-wall limiter, with an **ASSIST** engine that listens to the signal and proposes EQ/comp settings per instrument & style. |
 | **COHESION — ADT** | **Artificial Double Tracking** — the Abbey Road trick: a modulated, delayed double of a vocal to make it thicker and wider. |
 | **COHESION — TRANSIENT** | Four-control transient shaper (attack, sustain, sensitivity, output) — add punch or soften attacks. |
-| **COHESION — SYNTH** | Polyphonic hybrid synth: 4 VA oscillators + a DX7-compatible 6-operator FM engine, 2 filters, mod matrix, FX chain, arpeggiator, 1,101 presets and DX7 SysEx import. |
+| **COHESION — SYNTH** | Polyphonic hybrid synth: 4 VA oscillators + a DX7-compatible 6-operator FM engine, 2 filters, mod matrix, FX chain, arpeggiator, wavetables, 1,229 presets (incl. a General MIDI bank) and DX7 SysEx import. |
 | **COHESION — LA FONT** | SoundFont player (FluidSynth): 16 parts on their own MIDI channels, a SoundFont and preset per part, reverb and chorus per part, mixer and separate outputs. |
 | **COHESION — LA MODULE** | MT-32 emulator (Munt): 8 parts + rhythm on their own MIDI channels, MT-32 SysEx, reverb and echo per part, mixer and separate outputs. |
 | **COHESION — SYSEX** | Standalone app that builds new DX7 32-voice SysEx banks from voices picked out of a `.syx` collection. |
@@ -23,7 +23,7 @@ A polyphonic hybrid instrument: four virtual-analog oscillators, sub and noise, 
 **DX7-compatible 6-operator FM engine** (all 32 algorithms); ladder + state-variable filters,
 four envelopes, four LFOs and an 8-slot mod matrix; a drag-and-drop FX chain (comp, flanger,
 phaser, echo, reverb) with a limiter; and an arpeggiator with a 16-step velocity sequencer.
-1,101 loudness-matched factory presets in a LIBRARY browser, and DX7 SysEx banks can be
+1,229 loudness-matched factory presets (incl. the 128 General MIDI programs) in a searchable LIBRARY browser, and DX7 SysEx banks can be
 imported. See [Cohesion-Synth](Cohesion-Synth/README.md).
 
 <img src="Cohesion-Synth/screenshots/osc-mix.png" width="860" height="520" alt="COHESION - SYNTH · OSC / MIX">
@@ -93,6 +93,8 @@ COHESION/
 ├─ Cohesion-LaModule/  # COHESION - LA MODULE (VST3 instrument "Cohesion LA Module")
 ├─ Cohesion-LaFont/    # COHESION - LA FONT   (VST3 instrument "Cohesion LA Font")
 ├─ Cohesion-SysEx/     # COHESION - SYSEX     (standalone DX7 bank builder, see its README)
+├─ Common/            # shared by every app: version helpers (CMake) + start-up update check
+├─ versions.json      # the version of every app (single source of truth)
 └─ installer/         # Inno Setup script for the combined Windows installer
 ```
 
@@ -110,6 +112,23 @@ Run this inside a project folder (e.g. `Cohesion-ADT`). A built `.vst3` lands in
 `build/<Target>_artefacts/Release/VST3/`; on Windows, copy it to
 `C:\Program Files\Common Files\VST3\`. COHESION — SYSEX builds a standalone app.
 
+## Versions and the update check
+
+Every app has its own version in [`versions.json`](versions.json) (`"apps": { "synth": "1.4.0", … }`).
+CMake reads it at configure time (`Common/CohesionVersion.cmake`), so it ends up in the plugin's
+ProjectInfo and in the Windows file version of the `.vst3` / `.exe`.
+
+When an app's window opens, it fetches `versions.json` from this repository's `master` branch on
+GitHub in the background. If its own entry there is newer than the version it was built with,
+the header shows **UPDATE AVAILABLE**; hovering names the new version, clicking opens the
+releases page. Offline or on any error nothing is shown and nothing waits.
+
+To release a new version of one app: bump its entry in `versions.json`, rebuild that app, push.
+
+Testing: configure with `-DCOHESION_VERSION_OVERRIDE=1.0.0` to build an app that pretends to be
+older; `COHESION_UPDATE_URL=<file or URL>` points the check at another `versions.json`, and
+`COHESION_UPDATE_CHECK=0` switches it off.
+
 ## Installer
 
 A combined, branded Windows installer is built from `installer/Cohesion.iss` with
@@ -117,6 +136,11 @@ Inno Setup 6 (`ISCC.exe installer/Cohesion.iss`). It lets you choose which plugi
 to install and the plugin location (defaults to the VST3 folder); COHESION — SYSEX goes to
 `Program Files\Pepperwood` with a Start-menu shortcut. Download the latest pre-built
 installer from the [releases](../../releases/latest).
+
+The installer reads the version each component carries from its built binary and compares it
+with the one already installed in the chosen folder: a component that is already at that
+version (or newer) is greyed out and marked *up to date*; the others show *new* or
+*update vX → vY*.
 
 ## License
 
