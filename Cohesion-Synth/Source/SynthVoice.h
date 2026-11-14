@@ -47,6 +47,25 @@ public:
     void setGlideSource (double* lastNoteHz)    { lastHz = lastNoteHz; }
     void setFmSource (FmSource* s)              { fmSrc = s; }
     void setLaSource (LaSource* s)              { laSrc = s; }
+    void setRandomSeed (juce::int64 seed)       { rng.setSeed (seed); }   // every voice its own free-running phases
+    void setLfoClock (const std::atomic<double>* c) { lfoClock = c; }       // the DX7's shared LFO (seconds)
+
+    // MONO / LEGATO: the next startNote plays only `part` (its own mono stem) and glides from
+    // that stem's last note (hz). Used once, by the next startNote.
+    void armLane (int part, double* hz) { armPart = part; armHz = hz; }
+    int  lane() const                    { return lanePart; }   // -1: a poly voice (every part)
+
+    // a part is reloaded (MIXER / LOAD): this voice stops playing it, the other parts go on
+    void silencePart (int k)
+    {
+        if (k < 0 || k >= kBuses) return;
+        partOn[k] = false;
+        if (k == 1) fmStarted = false;
+        if (k == 2) laStarted = false;
+        last[k][0] = last[k][1] = declick[k][0] = declick[k][1] = 0.0f;
+        for (auto& f : lad[k]) f.reset();
+        for (auto& f : svf[k]) f.reset();
+    }
 
     bool canPlaySound (juce::SynthesiserSound* s) override { return dynamic_cast<SynthSound*> (s) != nullptr; }
 
@@ -74,13 +93,16 @@ public:
         killing = false;
 
         // which parts play this note: key range, and with the ARP on the part's ARP switch
-        // decides whether it takes the ARP notes (MIDI channel 2) or the played ones (channel 1)
+        // decides whether it takes the ARP notes (MIDI channel 2) or the played ones (channel 1).
+        // A MONO lane voice plays only its own part; a part being reloaded takes no new notes.
+        lanePart = armPart; glideHz = armHz != nullptr ? armHz : lastHz;
+        armPart = -1; armHz = nullptr;
         for (int k = 0; k < kBuses; ++k)
         {
             const auto& pp = snap->part[k];
             const bool inRange = note >= juce::jmin (pp.keyLo, pp.keyHi) && note <= juce::jmax (pp.keyLo, pp.keyHi);
             const bool source  = ! snap->arpOn || (pp.arp ? isPlayingChannel (2) : ! isPlayingChannel (2));
-            partOn[k] = inRange && source;
+            partOn[k] = (lanePart < 0 || lanePart == k) && inRange && source && ! snap->partHold[k];
         }
 
         midiNote = note;
@@ -89,14 +111,14 @@ public:
         bend = ((float) pitchWheel - 8192.0f) / 8192.0f;
         baseFreq = juce::MidiMessage::getMidiNoteInHertz (note);
         glideOct = 0.0;
-        if (lastHz != nullptr)
+        if (glideHz != nullptr)
         {
-            if (snap->glideMs > 0.5f && *lastHz > 0.0)
+            if (snap->glideMs > 0.5f && *glideHz > 0.0)
             {
-                glideOct = std::log2 (*lastHz / baseFreq);
+                glideOct = std::log2 (*glideHz / baseFreq);
                 gCoef = std::exp (-3.0 / (sr * (double) snap->glideMs * 0.001));
             }
-            *lastHz = baseFreq;
+            *glideHz = baseFreq;
         }
         for (auto& pr : lad) for (auto& f : pr) f.reset();
         for (auto& pr : svf) for (auto& f : pr) f.reset();
@@ -116,7 +138,8 @@ public:
             dx7::Patch p;
             { const juce::SpinLock::ScopedLockType sl (fmSrc->lock); p = fmSrc->patch; }
             fmv.prepare (sr);
-            fmv.noteOn (p, note, velocity, { snap->dxBright, snap->dxTime, snap->dxVel }, rng);
+            fmv.noteOn (p, note, velocity, { snap->dxBright, snap->dxTime, snap->dxVel,
+                                             lfoClock != nullptr ? lfoClock->load (std::memory_order_relaxed) : -1.0 }, rng);
             fmStarted = true;
         }
         engineHz = baseFreq;
@@ -158,7 +181,7 @@ public:
             glideOct = std::log2 (curHz / baseFreq);
             gCoef = std::exp (-3.0 / (sr * (double) snap->glideMs * 0.001));
         }
-        if (lastHz != nullptr) *lastHz = baseFreq;
+        if (glideHz != nullptr) *glideHz = baseFreq;
         if (retrigger && snap != nullptr)
         {
             vel = (1.0f - snap->velSens) + snap->velSens * velocity;
@@ -349,11 +372,11 @@ private:
         {
             const double pMult = snap->vaFiltMod ? this->pMult : pMultEng;   // without the matrix pitch when off
             float sumL = 0.0f, sumR = 0.0f, m2 = 0.0f;
-            if (snap->osc[1].on) { osc[1].render (snap->osc[1].wave, 0.0, smOsc[1], pMult, sumL, sumR, wtPos (1, d[7])); m2 = osc[1].lastOut; }
-            if (snap->osc[0].on) { double pm = (double) smFm * m2 * 0.5; osc[0].render (snap->osc[0].wave, pm, smOsc[0], pMult, sumL, sumR, wtPos (0, d[7])); }
+            if (snap->osc[1].on) { osc[1].render (snap->osc[1].wave, 0.0, smOsc[1], pMult, sumL, sumR, wtPos (1, d[7]), snap->osc[1].user); m2 = osc[1].lastOut; }
+            if (snap->osc[0].on) { double pm = (double) smFm * m2 * 0.5; osc[0].render (snap->osc[0].wave, pm, smOsc[0], pMult, sumL, sumR, wtPos (0, d[7]), snap->osc[0].user); }
             float m3 = 0.0f, m4 = 0.0f;
-            if (snap->osc[2].on) { osc[2].render (snap->osc[2].wave, 0.0, smOsc[2], pMult, sumL, sumR, wtPos (2, d[7])); m3 = osc[2].lastOut; }
-            if (snap->osc[3].on) { osc[3].render (snap->osc[3].wave, 0.0, smOsc[3], pMult, sumL, sumR, wtPos (3, d[7])); m4 = osc[3].lastOut; }
+            if (snap->osc[2].on) { osc[2].render (snap->osc[2].wave, 0.0, smOsc[2], pMult, sumL, sumR, wtPos (2, d[7]), snap->osc[2].user); m3 = osc[2].lastOut; }
+            if (snap->osc[3].on) { osc[3].render (snap->osc[3].wave, 0.0, smOsc[3], pMult, sumL, sumR, wtPos (3, d[7]), snap->osc[3].user); m4 = osc[3].lastOut; }
             if (smRing > 0.0f) { float r = smRing * m3 * m4; sumL += r; sumR += r; }
 
             if (snap->subOn)
@@ -435,7 +458,10 @@ private:
     int midiNote = 69, ctl = 0;
     float vel = 1.0f, velRaw = 1.0f, modWheel = 0.0f, bend = 0.0f;
     double* lastHz = nullptr; double glideOct = 0.0, gCoef = 1.0;
+    double* glideHz = nullptr;                  // where this note glides from (lastHz, or its MONO lane's)
+    int armPart = -1, lanePart = -1; double* armHz = nullptr;
     FmSource* fmSrc = nullptr;
+    const std::atomic<double>* lfoClock = nullptr;
     dx7::Voice fmv;
     LaSource* laSrc = nullptr;
     la32::Voice lav;
@@ -463,31 +489,55 @@ private:
 };
 
 // ===========================================================================
-//  juce::Synthesiser with MONO and LEGATO modes: one voice follows the last
-//  held key (note priority = last); releasing it returns to the previous held
-//  key. In POLY mode it behaves exactly like juce::Synthesiser.
+//  juce::Synthesiser with MONO and LEGATO modes. Every part (VA, FM, LA) has its own
+//  mono stem ("lane"): one voice that plays only that part and follows the last held
+//  key of the notes that part takes (key range, ARP / played channel); releasing it
+//  returns to the previous held key of that part. Parts on different key ranges or
+//  with the ARP on for one of them so play independently. In POLY mode it behaves
+//  exactly like juce::Synthesiser (one voice plays every part).
 // ===========================================================================
 class CohesionSynthesiser : public juce::Synthesiser
 {
 public:
-    int mode = 0;   // 0 poly, 1 mono (retrigger), 2 legato; set by the processor per block
     const syn::Snapshot* snap = nullptr;   // the voices' snapshot: which parts play a note
 
-    // true when at least one sounding part takes this note (key range, ARP / played channel);
-    // a note no part plays takes no voice (it would steal one from the notes that do sound)
-    bool anyPartPlays (int ch, int note) const
+    int  getMode() const { return mode; }
+    // 0 poly, 1 mono (retrigger), 2 legato; set by the processor per block
+    void setMode (int m)
+    {
+        if (m == mode) return;
+        const juce::ScopedLock sl (lock);
+        for (int k = 0; k < 3; ++k)   // a mode change releases the mono stems
+        {
+            if (auto* v = laneVoice (k)) stopVoice (v, 0.0f, true);
+            lanes[k] = Lane();
+        }
+        mode = m;
+    }
+
+    // part k takes this note: it sounds, the key is in its range, and it is on the right
+    // MIDI channel (with the ARP on: channel 2 = ARP notes, otherwise the played notes)
+    bool partTakes (int k, int ch, int note) const
     {
         if (snap == nullptr) return true;
-        const bool active[3] = { snap->osc[0].on || snap->osc[1].on || snap->osc[2].on || snap->osc[3].on
-                                   || snap->subOn || snap->noiseOn,
-                                 snap->dxOn, snap->laOn };
-        for (int k = 0; k < 3; ++k)
-        {
-            const auto& pp = snap->part[k];
-            const bool inRange = note >= juce::jmin (pp.keyLo, pp.keyHi) && note <= juce::jmax (pp.keyLo, pp.keyHi);
-            const bool source  = ! snap->arpOn || (pp.arp ? ch == 2 : ch != 2);
-            if (active[k] && inRange && source) return true;
-        }
+        const bool active = k == 0 ? (snap->osc[0].on || snap->osc[1].on || snap->osc[2].on || snap->osc[3].on
+                                      || snap->subOn || snap->noiseOn)
+                          : k == 1 ? snap->dxOn : snap->laOn;
+        const auto& pp = snap->part[k];
+        const bool inRange = note >= juce::jmin (pp.keyLo, pp.keyHi) && note <= juce::jmax (pp.keyLo, pp.keyHi);
+        return active && inRange && partSource (k, ch);
+    }
+    // with the ARP on, a part takes either the ARP notes (channel 2) or the played ones
+    bool partSource (int k, int ch) const
+    {
+        return snap == nullptr || ! snap->arpOn || (snap->part[k].arp ? ch == 2 : ch != 2);
+    }
+
+    // true when at least one sounding part takes this note; a note no part plays takes no
+    // voice (it would steal one from the notes that do sound)
+    bool anyPartPlays (int ch, int note) const
+    {
+        for (int k = 0; k < 3; ++k) if (partTakes (k, ch, note)) return true;
         return false;
     }
 
@@ -495,53 +545,106 @@ public:
     {
         if (! anyPartPlays (ch, note)) return;
         if (mode == 0) { juce::Synthesiser::noteOn (ch, note, velocity); return; }
-        removeHeld (note);
-        if (nHeld < 128) held[nHeld++] = note;
-        lastVel = velocity;
-        if (auto* v = monoVoice()) { v->legatoTo (note, velocity, mode == 1); soundingNote = note; return; }
-        juce::Synthesiser::noteOn (ch, note, velocity);
-        regNote = note; regCh = ch; soundingNote = note;
+        const juce::ScopedLock sl (lock);
+        for (int k = 0; k < 3; ++k)
+            if (partTakes (k, ch, note)) laneOn (k, ch, note, velocity);
     }
 
     void noteOff (int ch, int note, float velocity, bool allowTailOff) override
     {
-        if (mode == 0 || regNote < 0) { juce::Synthesiser::noteOff (ch, note, velocity, allowTailOff); return; }
-        removeHeld (note);
-        if (note != soundingNote) return;                          // a key that was not sounding
-        if (nHeld > 0)
-            if (auto* v = monoVoice())
-            {
-                soundingNote = held[nHeld - 1];
-                v->legatoTo (soundingNote, lastVel, mode == 1);
-                return;
-            }
-        juce::Synthesiser::noteOff (regCh, regNote, velocity, allowTailOff);   // the voice knows its first note
-        regNote = soundingNote = -1;
+        if (mode == 0) { juce::Synthesiser::noteOff (ch, note, velocity, allowTailOff); return; }
+        const juce::ScopedLock sl (lock);
+        for (int k = 0; k < 3; ++k) laneOff (k, ch, note, velocity, allowTailOff);
+        // voices started in POLY before the switch to MONO: released as usual
+        for (auto* voice : voices)
+            if (auto* v = dynamic_cast<SynthVoice*> (voice))
+                if (v->lane() < 0 && v->getCurrentlyPlayingNote() == note && v->isPlayingChannel (ch))
+                    release (v, velocity, allowTailOff);
     }
 
     void allNotesOff (int ch, bool allowTailOff) override
     {
-        nHeld = 0; regNote = soundingNote = -1;
+        {
+            const juce::ScopedLock sl (lock);
+            for (int k = 0; k < 3; ++k)
+                if (ch <= 0 || lanes[k].ch == ch) lanes[k] = Lane();
+        }
         juce::Synthesiser::allNotesOff (ch, allowTailOff);
     }
 
-private:
-    SynthVoice* monoVoice()
+protected:
+    // ALL SOUND OFF (CC 120, a host's panic): every voice stops now (3 ms fade), also a DX7
+    // voice whose release level L4 > 0 keeps sounding after note-off. ALL NOTES OFF releases.
+    void handleMidiEvent (const juce::MidiMessage& m) override
     {
-        if (regNote < 0) return nullptr;
-        for (int i = 0; i < getNumVoices(); ++i)
-            if (auto* v = dynamic_cast<SynthVoice*> (getVoice (i)))
-                if (v->getCurrentlyPlayingNote() == regNote && v->isHeld()) return v;
-        return nullptr;
-    }
-    void removeHeld (int note)
-    {
-        int w = 0;
-        for (int r = 0; r < nHeld; ++r) if (held[r] != note) held[w++] = held[r];
-        nHeld = w;
+        if (m.isAllSoundOff()) { allNotesOff (m.getChannel(), false); return; }
+        juce::Synthesiser::handleMidiEvent (m);
     }
 
-    int held[128] {}; int nHeld = 0;
-    int regNote = -1, regCh = 1, soundingNote = -1;
-    float lastVel = 0.8f;
+private:
+    struct Lane
+    {
+        int held[128] {}; int nHeld = 0;
+        SynthVoice* voice = nullptr;
+        int ch = 1, sounding = -1;
+        float vel = 0.8f;
+        double hz = 0.0;   // the stem's last note: GLIDE starts from here
+        bool has (int n) const { for (int i = 0; i < nHeld; ++i) if (held[i] == n) return true; return false; }
+        void remove (int n) { int w = 0; for (int r = 0; r < nHeld; ++r) if (held[r] != n) held[w++] = held[r]; nHeld = w; }
+    };
+
+    SynthVoice* laneVoice (int k)
+    {
+        auto* v = lanes[k].voice;
+        return (v != nullptr && v->lane() == k && v->isHeld()) ? v : nullptr;
+    }
+
+    void release (SynthVoice* v, float velocity, bool allowTailOff)
+    {
+        v->setKeyDown (false);
+        if (! (v->isSustainPedalDown() || v->isSostenutoPedalDown())) stopVoice (v, velocity, allowTailOff);
+    }
+
+    void laneOn (int k, int ch, int note, float velocity)
+    {
+        auto& L = lanes[k];
+        L.remove (note);
+        if (L.nHeld < 128) L.held[L.nHeld++] = note;
+        L.vel = velocity;
+        if (auto* v = laneVoice (k))
+        {
+            v->setKeyDown (true);
+            v->legatoTo (note, velocity, mode == 1);
+            L.sounding = note;
+            return;
+        }
+        auto* sound = getNumSounds() > 0 ? getSound (0).get() : nullptr;
+        if (sound == nullptr) return;
+        if (auto* v = dynamic_cast<SynthVoice*> (findFreeVoice (sound, ch, note, isNoteStealingEnabled())))
+        {
+            v->armLane (k, &L.hz);
+            startVoice (v, sound, ch, note, velocity);
+            L.voice = v; L.ch = ch; L.sounding = note;
+        }
+    }
+
+    void laneOff (int k, int ch, int note, float velocity, bool allowTailOff)
+    {
+        auto& L = lanes[k];
+        if (! partSource (k, ch) || ! L.has (note)) return;   // not this part's note (channel)
+        L.remove (note);
+        if (note != L.sounding) return;   // a held key that was not sounding
+        auto* v = laneVoice (k);
+        if (v != nullptr && L.nHeld > 0)
+        {
+            L.sounding = L.held[L.nHeld - 1];
+            v->legatoTo (L.sounding, L.vel, mode == 1);
+            return;
+        }
+        if (v != nullptr) release (v, velocity, allowTailOff);
+        L.sounding = -1;
+    }
+
+    int mode = 0;
+    Lane lanes[3];
 };

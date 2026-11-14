@@ -18,7 +18,8 @@
   DX7-voice, LA-timbre, ARP-patroon; niet de venstergrootte) als .cspreset in
   %APPDATA%/Pepperwood/Cohesion Synth/Presets; categorie "User" (direct onder Init) in de
   LIBRARY; vervangen na bevestiging, RENAME / DELETE (prullenbak), ook via rechtsklik.
-- [ ] User-presets in eigen submappen / categorieën (nu één categorie "User").
+- [x] User-presets in mappen: een submap van de presetmap is de categorie "User · <map>"; SAVE kiest een
+  map (of maakt een nieuwe), rechtsklik in de LIBRARY: Move to folder.
 - [x] **Multi sounds**: VA, FM en LA zijn drie parts; per part laden (LOAD VA... op OSC / MIX,
   LOAD op de FM- / LA-tab, LOAD... in de MIXER), de rest blijft staan; part-level = gematchte
   luidheid van de preset. User-presets bewaren de hele multi; één part eruit laden kan ook.
@@ -37,10 +38,12 @@
   versie) werden als 0 gelezen (KEY HIGH 0). Lege waarden = default; opslaan schrijft nu elke waarde.
 - [x] VA-part: ON-schakelaar en VA FILT+MOD in de MIXER; klik op de presetnaam opent de LIBRARY;
   alleen IMPORT .SYX / IMPORT ROMS (SYX FOLDER weg), de laatste importmap per soort onthouden.
-- [ ] Multi: een part laden kort het geheel uit (5 ms fade, alle voices stoppen), ook de andere parts.
-- [ ] Multi: in MONO / LEGATO delen alle parts (en ARP- + gespeelde noten) één monostem.
-- [ ] Gemeten luidheid van geïmporteerde DX7-voices met vrijlopende LFO / willekeurige
-  operatorfases varieert per render (Brass-bank: tot +4 dB): meerdere renders middelen.
+- [x] Multi: een part laden dooft alleen dat part (5 ms) en stopt alleen zijn noten; de andere parts
+  spelen door (via VA FILT+MOD gekoppelde parts dippen mee als de VA-part laadt).
+- [x] Multi: in MONO / LEGATO heeft elk part een eigen monostem (eigen key range, ARP- of gespeelde noten).
+- [x] Luidheid van geïmporteerde DX7-voices met vrije operators / LFO: gemiddeld over 5 renders met vaste
+  fases (parallel, ~60 ms). Elke stem eigen toevalsgenerator; DX7-LFO is één gedeelde vrijlopende LFO.
+  Een voice met L4 > 0 klinkt na note-off door (zoals een DX7); ALL SOUND OFF stopt alles meteen.
 - [ ] **SysEx bank-samensteller**: voices uit verschillende .syx-bestanden kiezen
   en samenvoegen tot een nieuwe 32-voice bank (eigen taak/sessie).
 - [x] LIBRARY-venster (categorieën → presets) naast de preset-kiezer.
@@ -57,7 +60,8 @@
 - [x] Wavetable-modus (WT): 12 banken (Analog, PWM, Harmonic, Vocal, Sync, FM, Fold, Organ,
   Odd/Even, Comb, Chip, Digital) x 8 frames, per octaaf band-begrensd (FFT), gelijke RMS per
   frame, eigen BANK-keuze per OSC, WT POS-morph + mod-bestemming "WT Pos".
-- [ ] Eigen wavetables importeren (.wav, frames van 2048 samples, Serum/Vital-formaat).
+- [x] Eigen wavetables: USER-knop per OSC (WT), import van .wav (Serum/Vital, 'clm'-chunk, losse cyclus),
+  max. 64 frames, in %APPDATA%/Pepperwood/Cohesion Synth/Wavetables; bank "User", per OSC in project en preset.
 - [x] **LA-engine** (MT-32 / CM-32L-compatibel): eigen synthese van het timbreformaat
   (4 partials, synth vierkant/zaag + TVF, PCM-samples uit de ROM, P-ENV/LFO, TVA,
   13 structuren incl. ringmodulatie) + LA-tab; offline getest (tests/LaTest.cpp).
@@ -67,8 +71,12 @@
   -velocity, PW, P-ENV-diepte, LFO, structuren 8/9 en ring-niveaus; group-B-tabel MT-32 1.07
   hersteld. Resultaat over 2 × 128 timbres: niveau-afwijking 1,9 -> 1,1 dB, aanzet 0,70 -> 0,26 oct,
   release 0,29 -> 0,18 oct, helderheid 0,68/0,86 -> 0,38/0,30 oct.
-- [ ] LA restpunten: Bird Tweet (extreem hoge toon + resonantie, ~-20 dB), sustain-niveau na 1 s
-  (gem. 4 dB), TVF-bias aan de "onder"-kant, LFO-snelheid > 85, P-ENV/TVF release-tijden.
+- [x] LA TVA zoals de LA32: segmenttijd hangt van de afstand af (log-tabel, ondergrens), sustain 0 en
+  release lopen naar amp 0, aanzet volgt velocity en de rest key; LFO-periode uit de MCU-tabel (driehoek,
+  pas na de pitch-envelope). MT-32 1.07: sustain na 1 s 2,5 -> 1,2 dB, release 0,22 -> 0,13 oct, aanzet
+  0,36 -> 0,32 oct (CM-32L idem).
+- [ ] LA restpunten: Bird Tweet (~-20 dB: de resonantie-sinus van de LA32 bij cutoff onder de grondtoon),
+  trage aanzet van koper (filter + golfvorm), P-ENV-releasetijden.
 
 ## COHESION — MT-32 MODULE (fase B, aparte plugin)
 - [ ] **Keuze engine**: Munt (mt32emu, LGPL 2.1+) gebruiken, of als A/B-referentie naast de
@@ -89,10 +97,7 @@
   ModuleTest --export om werkende sets te verzamelen.
 - [ ] LA MODULE vervolg: LCD-berichten (SysEx 20 00 00), timbre-kiezer in huisstijl i.p.v.
   popupmenu, MAME-halve chips (_a/_b, _h/_l) samenvoegen, ctrl_mt32_m9 onderzoeken.
-- [ ] (oorspronkelijke opdracht) Multi-timbrale MT-32-emulator op basis van de LA-engine: 8 melodische partijen +
-  ritmepartij, elk met eigen MIDI-kanaal (standaard 2–9 + 10), program changes en
-  MT-32/CM-32L SysEx (timbres, patches, systeem), 32 partials met voice-allocatie,
-  ritme-toetsindeling uit de ROM, reverb en echo, mixer per partij.
+- [x] ~~Multi-timbrale MT-32-emulator op de eigen LA-engine~~: vervalt, de LA MODULE (Munt) doet dit.
 - [x] FM-engine (DX7-compatibel, 6 operators, 32 algoritmes, operator-EG's, feedback,
   ratio/fixed, velocity, key scaling, pitch-EG, LFO) + FM-tab; offline getest
   (tests/FmTest.cpp).

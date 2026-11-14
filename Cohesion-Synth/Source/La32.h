@@ -293,6 +293,19 @@ namespace la32
     // envelope segment time (ms) - independent of the distance travelled; doubles every ~7.9 steps
     inline float envMs (int t) { return t <= 0 ? 0.0f : 3790.0f * std::exp2 ((float) (t - 80) / 7.92f); }
 
+    // TVA segment time (ms) for time setting t over `delta` level units, as the LA32 ramps it:
+    // the rate is 2^((r + 24) / 8) per sample (32 kHz, 2^18 per unit) with
+    // r = ceil (64 + 8 log2 delta) - t, at least 1. Above that floor the time does not depend on
+    // the distance (2^(7 + t/8) samples); a long time over a short distance hits the floor and
+    // is shorter (a slow fall to a sustain level close by ends in seconds, not tens of seconds).
+    inline float tvaSegMs (int t, float delta)
+    {
+        if (t <= 0) return 0.0f;
+        const float d = juce::jmax (1.0f, delta);
+        const int r = juce::jmax (1, (int) std::ceil (64.0f + 8.0f * std::log2 (d)) - t);
+        return d * 262144.0f / std::exp2 ((float) (r + 24) / 8.0f) / 32.0f;
+    }
+
     // linear interpolation in a table sampled every `step` parameter units
     template <size_t N> inline float lerpTab (const float (&tab)[N], float x, float step)
     {
@@ -312,6 +325,16 @@ namespace la32
     inline float tvfCutoffOct (float c) { return 10.617f + (c - 100.0f) * 0.0566f; }
     // time keyfollow 0..4 -> octaves of time per two octaves of key
     inline float timeKeyfollow (int k) { static const float t[5] = { 0.0f, 0.19f, 0.38f, 0.75f, 1.5f }; return t[juce::jlimit (0, 4, k)]; }
+
+    // Pitch LFO rate as the MCU times it: each sweep (one half period) lasts
+    // divisor[(d - 1) & 7] >> (12 - (d - 1) / 8) ticks of 256 / 500 kHz, d = 101 - rate
+    inline float lfoRateHz (int rate)
+    {
+        static const int div[8] = { 34078, 37162, 40526, 44194, 48194, 52556, 57312, 62499 };
+        const int d = juce::jlimit (1, 101, 101 - rate) - 1;
+        const int ticks = juce::jmax (1, div[d & 7] >> (12 - (d >> 3)));
+        return 1.0f / (2.0f * (float) ticks * 256.0f / 500000.0f);
+    }
 
     struct Seg { float target, ms; };
 
@@ -337,6 +360,7 @@ namespace la32
             inc = (target - value) / samples;
         }
         void release() { if (! releasing && ! done) { releasing = true; enter (0); } }
+        void releaseTo (float tgt, float ms) { if (releasing || done) return; rel = { tgt, ms }; releasing = true; enter (0); }
         // advance by n samples (control rate)
         void advance (int n)
         {
@@ -414,7 +438,7 @@ namespace la32
             penv.start ((p[0x0f] - 50) / 50.0f, ps, 3, { (p[0x13] - 50) / 50.0f, T (p[0x0e], ptk) }, false, sr);
 
             // --- LFO ---
-            lfoHz = 1.49f * std::exp2 ((p[0x14] - 50) / 7.92f);
+            lfoHz = lfoRateHz (p[0x14]);
             lfoDepth = p[0x15] * 0.00568f; lfoModSens = p[0x16] * 0.00568f; lfoPhase = 0.0;
 
             // --- TVF (synth partials only) ---
@@ -437,21 +461,56 @@ namespace la32
             }
 
             // --- TVA ---
+            // In the LA32 the TVA moves in amp units (0.375 dB each) on top of the partial's basic amp
+            // (155 minus level, velocity, bias, resonance): env level 0 is the basic amp, not silence.
+            // Segments into a zero sustain level, and every release, go to amp 0 (silence): they
+            // cover the basic amp as well, so they fall much faster in dB than a fall to level 0.
             float levelDb = tvaLevelDb (p[0x29]);
             const float s = (p[0x2a] - 50) / 50.0f, v127 = juce::jlimit (1.0f, 127.0f, vel * 127.0f);
             levelDb -= std::abs (s) * 0.296f * (s > 0.0f ? 127.0f - v127 : v127 - 1.0f);
             levelDb += juce::jmax (-54.0f, biasDb (p[0x2b], p[0x2c], key) + biasDb (p[0x2d], p[0x2e], key));
             levelGain = std::pow (10.0f, levelDb / 20.0f);
-            const int atk = p[0x2f];
-            static const float velTk[5] = { 0.0f, 0.22f, 0.44f, 0.9f, 1.87f };
-            const float velT = std::exp2 (-(v127 - 64.0f) / 63.0f * velTk[juce::jlimit (0, 4, (int) p[0x30])]);
-            Seg as[4] = { { p[0x36] / 100.0f, T (p[0x31], atk) * velT }, { p[0x37] / 100.0f, T (p[0x32], atk) },
-                          { p[0x38] / 100.0f, T (p[0x33], atk) }, { p[0x39] / 100.0f, T (p[0x34], atk) } };
-            tva.start (0.0f, as, 4, { 0.0f, T (p[0x35], atk) / 2.41f }, noSustain, sr);
+            basicUnits = juce::jlimit (0.0f, 155.0f, 155.0f + levelDb / 0.375f) - (float) (p[0x18] >> 1);
+            basicUnits = juce::jmax (0.0f, basicUnits);
+            zeroV = -basicUnits / 100.0f;
+            // times as the LA32 sets them: the attack is shortened by velocity (TIME VELO SENS),
+            // the later segments by key (TIME KEYFOLLOW); each segment's time depends on its distance
+            const int atk = juce::jlimit (0, 4, (int) p[0x2f]), vSens = juce::jlimit (0, 4, (int) p[0x30]);
+            const int vel7 = juce::roundToInt (v127);
+            int tAtk = p[0x31] - ((vel7 - 64) >> (6 - vSens));
+            if (tAtk <= 0 && p[0x31] != 0) tAtk = 1;
+            const int keySub = atk == 0 ? 0 : (key - 60) >> (5 - atk);
+            // levels in amp units above the basic amp; a zero sustain level (and, except on the
+            // MT-32 1.x firmware, zero levels just before it) targets amp 0 = -basicUnits
+            float L[5] = { 0.0f, (float) p[0x36], (float) p[0x37], (float) p[0x38], (float) p[0x39] };
+            const bool quirk = rom.model == "MT-32" && rom.version.startsWith ("1");
+            endsSilent = p[0x39] == 0;
+            if (endsSilent)
+            {
+                L[4] = -basicUnits;
+                for (int k = 3; k >= 1 && ! quirk && p[0x35 + k] == 0; --k) L[k] = -basicUnits;
+            }
+            auto segT = [&] (int t, int k) { return tvaSegMs (t, std::abs (L[k] - L[k - 1])) * tScale; };
+            Seg as[4] = { { L[1] / 100.0f, segT (tAtk, 1) },
+                          { L[2] / 100.0f, segT (p[0x32] - keySub, 2) },
+                          { L[3] / 100.0f, segT (p[0x33] - keySub, 3) },
+                          { L[4] / 100.0f, segT (p[0x34] - keySub, 4) } };
+            relTime = p[0x35]; this->tScale = tScale; this->noSustain = noSustain;
+            tva.start (0.0f, as, 4, { zeroV, 0.0f }, false, sr);
             ctl = 0; tvfGain = 1.0f;
         }
 
-        void noteOff() { tva.release(); tvf.release(); penv.release(); }
+        void noteOff() { startTvaRelease(); tvf.release(); penv.release(); }
+
+        // the LA32 release: to amp 0 at a rate set by the release time alone (2^((128 - t + 24) / 8)
+        // per sample), so it takes longer from a higher level; time 0 = at once
+        void startTvaRelease()
+        {
+            if (tva.releasing || tva.done) return;
+            const float units = juce::jmax (0.0f, tva.value * 100.0f + basicUnits);
+            const float ms = relTime <= 0 ? 0.0f : units * std::exp2 ((float) relTime / 8.0f - 1.0f) / 32.0f * tScale;
+            tva.releaseTo (zeroV, ms);
+        }
         bool isDone() const { return ! active || tva.done || finished; }
 
         float render (double pitchMult, float modWheel)
@@ -532,8 +591,17 @@ namespace la32
         {
             ctl = kCtl - 1;
             penv.advance (kCtl); tva.advance (kCtl);
+            if (! tva.releasing && tva.stage >= tva.nDown)
+            {
+                if (endsSilent) finished = true;          // reached amp 0: the partial ends
+                else if (noSustain) startTvaRelease();    // rhythm / no-sustain: release after the envelope
+            }
             lfoPhase += lfoHz * kCtl / sr; if (lfoPhase >= 1.0) lfoPhase -= 1.0;
-            const float lfo = (float) std::sin (juce::MathConstants<double>::twoPi * lfoPhase) * (lfoDepth + modWheel * lfoModSens);
+            // a triangle (linear pitch sweeps), only once the pitch envelope has settled and not
+            // in the release, as in the LA32 firmware
+            const float tri = (float) (lfoPhase < 0.5 ? 4.0 * lfoPhase - 1.0 : 3.0 - 4.0 * lfoPhase);
+            const bool lfoRuns = ! penv.releasing && penv.stage >= penv.nDown;
+            const float lfo = lfoRuns ? tri * (lfoDepth + modWheel * lfoModSens) : 0.0f;
             pitchCtl = std::exp2 ((penv.value * penvRange + lfo) / 12.0);
             if (! pcmMode)
             {
@@ -557,7 +625,7 @@ namespace la32
             }
             // TVA runs in the log domain: 0.375 dB per level unit, level 0 = off
             const float v = tva.value;
-            const float envGain = v <= 0.0f ? 0.0f : std::pow (10.0f, (v - 1.0f) * 37.5f / 20.0f) * juce::jmin (1.0f, v * 100.0f);
+            const float envGain = v <= zeroV ? 0.0f : std::pow (10.0f, (v - 1.0f) * 37.5f / 20.0f) * juce::jmin (1.0f, (v - zeroV) * 100.0f);
             const float target = envGain * levelGain * tvfGain;
             gainStep = (target - gain) / (float) kCtl;
             if (tva.done) finished = true;
@@ -569,6 +637,7 @@ namespace la32
         PcmWave wave;
         bool saw = false, finished = false;
         float duty = 0.5f, basePitch = 60.0f, penvRange = 0, lfoHz = 1, lfoDepth = 0, lfoModSens = 0;
+        float basicUnits = 155.0f, zeroV = -1.55f, tScale = 1.0f; int relTime = 0; bool endsSilent = false, noSustain = false;
         float tvfGain = 1.0f, cutoffBase = 100.0f, cutoffShift = 0.0f, res = 0.765f, resQ = 1.307f, resDb = 0.0f, tvfDepth = 0.0f, gCut = 0.5f, levelGain = 1.0f, gain = 0.0f, gainStep = 0.0f;
         int ctl = 0;
         Env penv, tvf, tva;

@@ -53,6 +53,7 @@ int main (int argc, char** argv)
     _putenv_s ("COHESION_SYNTH_SYSEX_DIR", tmp.getChildFile ("sysex").getFullPathName().toRawUTF8());
     _putenv_s ("COHESION_SYNTH_ROM_DIR",   tmp.getChildFile ("roms").getFullPathName().toRawUTF8());
     _putenv_s ("COHESION_SYNTH_PRESET_DIR", tmp.getChildFile ("presets").getFullPathName().toRawUTF8());
+    _putenv_s ("COHESION_SYNTH_WT_DIR", tmp.getChildFile ("wavetables").getFullPathName().toRawUTF8());
 
     const double sr = 48000.0;
     CohesionSynthAudioProcessor p;
@@ -88,6 +89,21 @@ int main (int argc, char** argv)
     const auto fm2 = render (p, sr, 4.0, 60, 1.0);
     // (the FM voice starts with random operator phases: a few dB of spread between notes is normal)
     check (std::abs (db (avg (fm2, 0.2, 1.0)) - db (fmHold)) < 3.0, "the FM voice level is unchanged by the AMP envelope");
+
+    // ---- 1b. a DX7 drone (carrier release level L4 > 0) and ALL SOUND OFF ----
+    {
+        p.loadPreset (dxIdx);
+        auto drone = dx7::initVoice(); drone.op[0].l[3] = 90;   // OP1 (carrier) holds level 90 after note-off
+        p.setFmPatch (drone, "test");
+        const auto r = render (p, sr, 1.5, 60, 0.3);
+        const bool held = avg (r, 1.2, 1.5) > 1.0e-3;
+        juce::AudioBuffer<float> b (2, 256); juce::MidiBuffer m;
+        m.addEvent (juce::MidiMessage::allSoundOff (1), 0);
+        p.processBlock (b, m);
+        const auto after = render (p, sr, 0.2, -1, 0.0);
+        std::printf ("  DX7 drone after note-off %.1f dB, after ALL SOUND OFF %.1f dB\n", db (avg (r, 1.2, 1.5)), db (avg (after, 0.05, 0.2)));
+        check (held && avg (after, 0.05, 0.2) < 1.0e-5, "ALL SOUND OFF stops a DX7 voice that sounds on after note-off (L4 > 0)");
+    }
 
     // ---- 2. preset change while a note rings (audio on its own thread, as in a host) ----
     std::printf ("2. preset change during a ringing note\n");
@@ -136,10 +152,15 @@ int main (int argc, char** argv)
 
     // ---- 3. imported voices are loudness-matched like the factory presets (-18 dB) ----
     std::printf ("3. loudness of the imported DX7 voices (chord C3-E3-G3, momentary max 300 ms)\n");
-    std::vector<double> dev, raw;
+    std::vector<double> dev, raw, loadMs;
     for (int i = dxIdx; i < p.numPresets() && p.presetCategory (i) == imp.firstCategory; ++i)
     {
+        // as in a host whose transport is idle: the preset change stops every voice (a DX7 voice
+        // with a carrier's release level L4 > 0 keeps sounding after note-off, like on a DX7)
+        std::this_thread::sleep_for (std::chrono::milliseconds (260));
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
         p.loadPreset (i);
+        loadMs.push_back (juce::Time::getMillisecondCounterHiRes() - t0);
         const float main = p.apvts.getRawParameterValue (pid::mainVol)->load();
         const float drive = p.apvts.getRawParameterValue (pid::limDrive)->load();
         const int bs = 512; juce::AudioBuffer<float> b (2, bs); std::vector<float> mono;
@@ -156,12 +177,14 @@ int main (int argc, char** argv)
         { double e = 0; for (int k = 0; k < win; ++k) e += mono[(size_t) (st + k)] * mono[(size_t) (st + k)]; loud = juce::jmax (loud, std::sqrt (e / win)); }
         const double ld = db (loud);
         dev.push_back (ld + 18.0);
+        if (std::abs (ld + 18.0) > 3.0) std::printf ("    off target: %-12s %+.1f dB (MAIN %.2f, DRIVE %.1f)\n", p.presetName (i).toRawUTF8(), ld + 18.0, main, drive);
         raw.push_back (ld - db (main) - drive + db (0.8));   // what it was at the old fixed MAIN 0.8
         render (p, sr, 2.0, -1, 0.0);                       // let the tail die
     }
     auto spread = [] (std::vector<double> v) { std::sort (v.begin(), v.end()); return std::make_pair (v.front(), v.back()); };
     const auto sNew = spread (dev), sOld = spread (raw);
     std::printf ("  %d voices: before %+.1f .. %+.1f dB around -18, now %+.1f .. %+.1f dB\n", (int) dev.size(), sOld.first + 18.0, sOld.second + 18.0, sNew.first, sNew.second);
+    { auto v = loadMs; std::sort (v.begin(), v.end()); std::printf ("  first load of an imported voice (loudness measured): median %.0f ms, max %.0f ms\n", v[v.size() / 2], v.back()); }
     int within = 0; for (double d : dev) if (std::abs (d) <= 3.0) ++within;
     check (within >= (int) dev.size() * 9 / 10, "at least 90 % of the voices within 3 dB of the target");
 
@@ -230,6 +253,30 @@ int main (int argc, char** argv)
         for (int i = p.numPresets() - 1; i >= 0; --i) if (p.presetIsUser (i)) p.deleteUserPreset (i);
         check (p.numPresets() == nBefore - 2 && P::userPresetDir().findChildFiles (juce::File::findFiles, false, "*.cspreset").isEmpty(),
                "delete removes the presets and their files");
+
+        // folders: a subfolder is the category "User · <folder>"
+        const int f1 = p.saveUserPreset ("Glass", false, "Pads");
+        const auto padsCat = P::userCategoryFor ("Pads");
+        check (f1 >= 0 && p.presetCategory (f1) == padsCat && p.presetUserFolder (f1) == "Pads"
+               && P::userPresetDir().getChildFile ("Pads").getChildFile ("Glass.cspreset").existsAsFile(),
+               "SAVE into a folder: the file is in the subfolder, the category is \"User · Pads\"");
+        check (p.saveUserPreset ("Glass", false) >= 0, "the same name may exist in another folder");
+        check (p.saveUserPreset ("Glass", false, "Pads") == P::kSaveExists, "but not twice in one folder");
+        int inPads = -1; for (int i = 0; i < p.numPresets(); ++i) if (p.presetCategory (i) == padsCat) inPads = i;
+        const int moved = p.moveUserPreset (inPads, "Leads");
+        check (moved >= 0 && p.presetCategory (moved) == P::userCategoryFor ("Leads")
+               && P::userPresetDir().getChildFile ("Leads").getChildFile ("Glass.cspreset").existsAsFile()
+               && ! P::userPresetDir().getChildFile ("Pads").getChildFile ("Glass.cspreset").exists(),
+               "Move to folder moves the file (a new folder is made)");
+        check (p.moveUserPreset (moved, {}) == P::kSaveExists, "moving onto a name the target folder has is refused");
+        check (P::userPresetFolders() == juce::StringArray { "Leads", "Pads" }, "the folders are listed (also an empty one)");
+        {
+            CohesionSynthAudioProcessor q;
+            int n = 0; for (int i = 0; i < q.numPresets(); ++i) n += q.presetCategory (i) == P::userCategoryFor ("Leads") ? 1 : 0;
+            check (n == 1, "a new plugin instance lists the folder's presets");
+        }
+        for (int i = p.numPresets() - 1; i >= 0; --i) if (p.presetIsUser (i)) p.deleteUserPreset (i);
+        P::userPresetDir().getChildFile ("Pads").deleteRecursively(); P::userPresetDir().getChildFile ("Leads").deleteRecursively();
     }
 
     // ---- 6. multi sounds: a part at a time, MIXER level / mute / solo / keys / ARP / sends / filter ----
@@ -382,6 +429,171 @@ int main (int argc, char** argv)
         check (p.apvts.getRawParameterValue (pid::dxOn)->load() > 0.5f && p.partSoundName (pid::kVA).contains ("Pad"),
                "the FM part of a User preset loads alone");
         p.deleteUserPreset (u);
+
+        // ---- loading one part while a note rings: only that part fades, the others play on ----
+        {
+            p.loadPreset (pad); p.loadPresetIntoPart (dx, pid::kFM);
+            setP (p, pid::partFilter (pid::kFM), 0.0f);
+            std::atomic<bool> run2 { true }; std::atomic<int> req { 0 };
+            std::vector<std::array<float, 3>> blk; blk.reserve (2000);
+            std::thread au ([&]
+            {
+                const int bs = 256; juce::AudioBuffer<float> b (2, bs);
+                while (run2)
+                {
+                    juce::MidiBuffer m;
+                    const int r = req.exchange (0);
+                    if (r == 1) m.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+                    if (r == 2) m.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 100), 0);
+                    if (r == 3) { m.addEvent (juce::MidiMessage::noteOff (1, 60), 0); m.addEvent (juce::MidiMessage::noteOff (1, 64), 0); }
+                    p.processBlock (b, m);
+                    std::array<float, 3> pk {}; for (int k = 0; k < 3; ++k) pk[(size_t) k] = p.takePartPeak (k);
+                    blk.push_back (pk);
+                    std::this_thread::sleep_for (std::chrono::microseconds (2500));
+                }
+            });
+            auto wait = [] (int ms) { std::this_thread::sleep_for (std::chrono::milliseconds (ms)); };
+            wait (60); req = 1; wait (600);
+            const size_t b0 = blk.size();
+            p.loadPresetIntoPart (dx + 1, pid::kFM);   // another DX7 voice into the FM part, note 60 still held
+            const size_t b1 = blk.size();
+            wait (300);
+            const size_t b2 = blk.size();
+            req = 2; wait (300);
+            const size_t b3 = blk.size();
+            req = 3; wait (100);
+            run2 = false; au.join();
+            auto mx = [&] (int k, size_t a, size_t e) { float m = 0; for (size_t i = a; i < e && i < blk.size(); ++i) m = juce::jmax (m, blk[i][(size_t) k]); return m; };
+            auto mn = [&] (int k, size_t a, size_t e) { float m = 1e9f; for (size_t i = a; i < e && i < blk.size(); ++i) m = juce::jmin (m, blk[i][(size_t) k]); return m; };
+            auto mean = [&] (int k, size_t a, size_t e) { double m = 0; int c = 0; for (size_t i = a; i < e && i < blk.size(); ++i) { m += blk[i][(size_t) k]; ++c; } return c ? (float) (m / c) : 0.0f; };
+            const float vaBefore = mean (0, b0 - 20, b0), vaDuring = mean (0, b0, b1 + 4), vaLow = mn (0, b0, b1 + 4);
+            const float fmBefore = mx (1, b0 - 20, b0), fmHeld = mx (1, b1 + 4, b2), fmNew = mx (1, b2 + 4, b3);
+            std::printf ("  part load during a note: VA mean %.3f -> %.3f (lowest block %.3f) during the load; FM %.3f -> %.4f (held note), new note %.3f\n",
+                         vaBefore, vaDuring, vaLow, fmBefore, fmHeld, fmNew);
+            check (vaBefore > 1.0e-3f && vaDuring > vaBefore * 0.7f && vaLow > vaBefore * 0.3f, "loading the FM part leaves the VA part playing (no fade, no stop)");
+            check (fmBefore > 1.0e-3f && fmHeld < 1.0e-5f, "the FM part's held note stops under its fade (it never plays the new voice)");
+            check (fmNew > 1.0e-3f, "a new note plays the newly loaded FM voice");
+            render (p, sr, 5.0, -1, 0.0);
+        }
+
+        // ---- MONO: every part has its own mono stem ----
+        {
+            p.loadPreset (pad); p.loadPresetIntoPart (dx, pid::kFM);
+            setP (p, pid::partFilter (pid::kFM), 0.0f);
+            setP (p, pid::voiceMode, 1.0f);                                        // MONO
+            setP (p, pid::partKeyHi (pid::kVA), 59.0f); setP (p, pid::partKeyLo (pid::kFM), 60.0f);   // split at C4
+            render (p, sr, 0.05, -1, 0.0);
+            // hold C3 (VA), then add C5 (FM): both sound; release C5: VA keeps its note
+            auto play = [&] (std::vector<std::pair<double, juce::MidiMessage>> ev, double sec)
+            {
+                const int bs = 256; juce::AudioBuffer<float> b (2, bs);
+                std::vector<std::array<float, 3>> out;
+                for (int pos = 0; pos < (int) (sec * sr); pos += bs)
+                {
+                    juce::MidiBuffer m;
+                    for (auto& e : ev) { const int at = (int) (e.first * sr); if (at >= pos && at < pos + bs) m.addEvent (e.second, at - pos); }
+                    p.processBlock (b, m);
+                    std::array<float, 3> pk {}; for (int k = 0; k < 3; ++k) pk[(size_t) k] = p.takePartPeak (k);
+                    out.push_back (pk);
+                }
+                return out;
+            };
+            using MM = juce::MidiMessage;
+            const auto r = play ({ { 0.0, MM::noteOn (1, 48, (juce::uint8) 100) }, { 0.5, MM::noteOn (1, 72, (juce::uint8) 100) },
+                                   { 1.5, MM::noteOff (1, 72) }, { 3.0, MM::noteOff (1, 48) } }, 3.5);
+            auto at = [&] (double t0, double t1, int k) { float m = 0; for (int i = (int) (t0 * sr / 256); i < (int) (t1 * sr / 256) && i < (int) r.size(); ++i) m = juce::jmax (m, r[(size_t) i][(size_t) k]); return m; };
+            const float vaA = at (0.3, 0.5, 0), vaB = at (1.0, 1.5, 0), fmB = at (1.0, 1.5, 1), vaC = at (2.6, 3.0, 0), fmC = at (2.6, 3.0, 1);
+            std::printf ("  MONO split: C3 alone VA %.3f; + C5: VA %.3f FM %.3f; C5 released: VA %.3f FM %.4f\n", vaA, vaB, fmB, vaC, fmC);
+            check (vaB > vaA * 0.5f && fmB > 1.0e-3f, "MONO: the VA and FM parts each play their own key at the same time");
+            check (vaC > vaA * 0.3f && fmC < fmB * 0.1f, "releasing the FM key leaves the VA part's mono note");
+            // with no split, MONO still plays every part on the last key (one stem per part)
+            setP (p, pid::partKeyHi (pid::kVA), 127.0f); setP (p, pid::partKeyLo (pid::kFM), 0.0f);
+            render (p, sr, 5.0, -1, 0.0);
+            const auto r2 = play ({ { 0.0, MM::noteOn (1, 48, (juce::uint8) 100) }, { 0.5, MM::noteOn (1, 52, (juce::uint8) 100) },
+                                    { 1.5, MM::noteOff (1, 52) }, { 1.6, MM::noteOff (1, 48) } }, 2.0);
+            float vaL = 0, fmL = 0; for (int i = (int) (1.0 * sr / 256); i < (int) (1.5 * sr / 256); ++i) { vaL = juce::jmax (vaL, r2[(size_t) i][0]); fmL = juce::jmax (fmL, r2[(size_t) i][1]); }
+            check (vaL > 1.0e-3f && fmL > 1.0e-3f, "MONO without a split: both parts play the last key");
+            setP (p, pid::voiceMode, 0.0f);
+            render (p, sr, 5.0, -1, 0.0);
+        }
+    }
+
+    // ---- 7. imported wavetables (WT bank "User") ----
+    std::printf ("7. imported wavetables\n");
+    {
+        using P = CohesionSynthAudioProcessor;
+        // a Serum-style file: 16-bit PCM, a "clm " chunk saying 1024 samples per frame, 8 frames;
+        // frame k is a sine at harmonic k + 1
+        auto writeWav = [] (const juce::File& f, const std::vector<float>& x, const juce::String& clm)
+        {
+            juce::MemoryOutputStream o;
+            auto u32 = [&o] (juce::uint32 v) { o.writeInt ((int) v); };
+            auto u16 = [&o] (int v) { o.writeShort ((short) v); };
+            const juce::uint32 dataLen = (juce::uint32) x.size() * 2;
+            const juce::uint32 clmLen = (juce::uint32) clm.getNumBytesAsUTF8();
+            const juce::uint32 clmChunk = clm.isEmpty() ? 0 : 8 + clmLen + (clmLen & 1);
+            o.write ("RIFF", 4); u32 (4 + 24 + clmChunk + 8 + dataLen); o.write ("WAVE", 4);
+            o.write ("fmt ", 4); u32 (16); u16 (1); u16 (1); u32 (48000); u32 (96000); u16 (2); u16 (16);
+            if (clm.isNotEmpty()) { o.write ("clm ", 4); u32 (clmLen); o.write (clm.toRawUTF8(), clmLen); if (clmLen & 1) o.writeByte (0); }
+            o.write ("data", 4); u32 (dataLen);
+            for (float v : x) u16 ((int) std::lround (juce::jlimit (-1.0f, 1.0f, v) * 32000.0f));
+            f.replaceWithData (o.getData(), o.getDataSize());
+        };
+        const auto src = tmp.getChildFile ("Harmonics.wav");
+        std::vector<float> x;
+        for (int k = 0; k < 8; ++k)
+            for (int i = 0; i < 1024; ++i) x.push_back (0.8f * (float) std::sin (juce::MathConstants<double>::twoPi * (k + 1) * i / 1024.0));
+        writeWav (src, x, "<!>1024 10000000 wavetable (www.xferrecords.com)");
+        const auto one = tmp.getChildFile ("Single Saw.wav");
+        std::vector<float> saw; for (int i = 0; i < 600; ++i) saw.push_back (0.8f * (2.0f * (float) i / 600.0f - 1.0f));
+        writeWav (one, saw, {});
+
+        juce::String err;
+        const auto n1 = p.importWavetable (src, err), n2 = p.importWavetable (one, err);
+        check (n1 == "Harmonics" && n2 == "Single Saw" && P::userWavetables().size() == 2
+               && P::userWavetableDir().getChildFile ("Harmonics.wav").existsAsFile(), "two .wav files imported into the wavetable folder");
+        check (p.importWavetable (src, err) == "Harmonics" && P::userWavetables().size() == 2, "importing the same file again adds no copy");
+        const auto bad = tmp.getChildFile ("not a wav.wav"); bad.replaceWithText ("hello");
+        check (p.importWavetable (bad, err).isEmpty() && err.isNotEmpty(), "a broken file is refused with a reason");
+
+        p.loadPreset (0);
+        setP (p, pid::oscOn (2), 0.0f); setP (p, pid::vaFiltMod, 0.0f);   // OSC 1 alone, past the filters
+        check (p.setOscUserWavetable (1, "Harmonics") && p.oscUserWavetableFrames (1) == 8
+               && p.apvts.getRawParameterValue (pid::oscWtBank (1))->load() == (float) pid::kWtUserBank
+               && p.apvts.getRawParameterValue (pid::oscMode (1))->load() > 0.5f,
+               "the 'clm' chunk gives 8 frames of 1024; OSC 1 switches to WT bank User");
+        auto crossings = [&] (float pos)
+        {
+            setP (p, pid::oscWtPos (1), pos);
+            render (p, sr, 0.05, -1, 0.0);
+            const int bs = 256; juce::AudioBuffer<float> b (2, bs); std::vector<float> y;
+            for (int k = 0; k < (int) (0.5 * sr) / bs; ++k)
+            {
+                juce::MidiBuffer m; if (k == 0) m.addEvent (juce::MidiMessage::noteOn (1, 45, (juce::uint8) 100), 0);   // A2, 110 Hz
+                p.processBlock (b, m); for (int i = 0; i < bs; ++i) y.push_back (b.getSample (0, i));
+            }
+            juce::AudioBuffer<float> b2 (2, bs); juce::MidiBuffer off; off.addEvent (juce::MidiMessage::noteOff (1, 45), 0); p.processBlock (b2, off);
+            render (p, sr, 1.0, -1, 0.0);
+            int c = 0; for (size_t i = (size_t) (0.1 * sr); i + 1 < y.size(); ++i) c += (y[i] <= 0.0f && y[i + 1] > 0.0f) ? 1 : 0;
+            return c / 0.4;   // per second
+        };
+        const double f0 = crossings (0.0f), f1 = crossings (1.0f);
+        std::printf ("  WT POS 0: %.0f Hz, WT POS 100 %%: %.0f Hz (frame 8 = 8th harmonic of 110 Hz)\n", f0, f1);
+        check (std::abs (f0 - 110.0) < 5.0 && std::abs (f1 - 880.0) < 20.0, "WT POS morphs through the imported frames");
+
+        check (p.setOscUserWavetable (2, "Single Saw") && p.oscUserWavetableFrames (2) == 1, "a single cycle of 600 samples is one frame");
+        const int u = p.saveUserPreset ("WT test", true);
+        {
+            CohesionSynthAudioProcessor q;
+            int qi = -1; for (int i = 0; i < q.numPresets(); ++i) if (q.presetIsUser (i) && q.presetName (i) == "WT test") qi = i;
+            if (qi >= 0) q.loadPreset (qi);
+            check (qi >= 0 && q.oscUserWavetable (1) == "Harmonics" && q.oscUserWavetableFrames (1) == 8 && q.oscUserWavetable (2) == "Single Saw",
+                   "a User preset keeps the oscillators' wavetables");
+            juce::MemoryBlock st; p.getStateInformation (st);
+            CohesionSynthAudioProcessor r; r.setStateInformation (st.getData(), (int) st.getSize());
+            check (r.oscUserWavetable (1) == "Harmonics" && r.oscUserWavetableFrames (1) == 8, "and so does the project (plugin state)");
+        }
+        if (u >= 0) p.deleteUserPreset (u);
     }
 
     if (argc > 2)

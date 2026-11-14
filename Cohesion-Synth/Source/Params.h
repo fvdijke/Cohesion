@@ -30,12 +30,13 @@ namespace pid
     inline const juce::String& oscSemi (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_semi"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
     inline const juce::String& oscFine (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_fine"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
     inline const juce::String& oscWtPos (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_wtpos"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
-    inline const juce::StringArray& wtBankNames()   // must match syn::Wavetables (B banks)
+    inline const juce::StringArray& wtBankNames()   // must match syn::Wavetables (B banks), then "User"
     {
         static const juce::StringArray n { "Analog", "PWM", "Harmonic", "Vocal", "Sync", "FM",
-                                           "Fold", "Organ", "Odd/Even", "Comb", "Chip", "Digital" };
+                                           "Fold", "Organ", "Odd/Even", "Comb", "Chip", "Digital", "User" };
         return n;
     }
+    static constexpr int kWtUserBank = 12;   // the oscillator plays its imported wavetable (state "wtUser<n>")
     inline const juce::String& oscWtBank (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_wtbank"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
     inline const juce::String& oscUni (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_unison"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }
     inline const juce::String& oscDet (int i) { static const auto t = detail::makeIds<1, 4> ("osc", "_detune"); return t[(size_t) juce::jlimit (0, 3, i - 1)]; }

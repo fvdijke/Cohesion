@@ -13,10 +13,14 @@ arpeggiator, in the Cohesion house style. All DSP is original code.
 - **4 oscillators**, each **VA** (band-limited saw / square / triangle / sine) or **WT**
   (wavetable: 12 banks — Analog, PWM, Harmonic, Vocal, Sync, FM, Fold, Organ, Odd/Even, Comb,
   Chip, Digital — of 8 frames each, picked with the BANK box, morphed with WT POS, equal
-  loudness per frame and band-limited per octave), with unison & detune, octave / semitone / fine, pan,
+  loudness per frame and band-limited per octave — or **your own wavetables**: the **USER**
+  button imports `.wav` files (Serum / Vital, 2048 samples per frame, the `clm` chunk is read;
+  a short file is one single cycle; up to 64 frames) into
+  `%APPDATA%\Pepperwood\Cohesion Synth\Wavetables` and picks one per oscillator (bank
+  "User", kept in the project and in User presets), with unison & detune, octave / semitone / fine, pan,
   level and phase; **SUB** and **NOISE** (white / pink, with a dark ↔ thin FILTER);
   **FM 2 → 1** and **ring 3 × 4**; a mixer with faders per source.
-- **VOICE** POLY / MONO / LEGATO (last-note priority) with **GLIDE**, **VELOCITY** sensitivity,
+- **VOICE** POLY / MONO / LEGATO (last-note priority; in a multi sound every part has its own mono voice) with **GLIDE**, **VELOCITY** sensitivity,
   pitch bend (± 2 semitones), 16 voices; a stolen voice fades out instead of clicking.
 - **FM engine (DX7-compatible)**: 6 operators, all 32 algorithms, 4-rate / 4-level operator
   envelopes, ratio or fixed frequency, detune, feedback, velocity and keyboard scaling,
@@ -27,7 +31,9 @@ arpeggiator, in the Cohesion house style. All DSP is original code.
 - **LA engine (MT-32 / CM-32L-compatible)**: plays the timbres of your own Roland control + PCM
   ROM dumps (never included) — up to 4 partials per timbre (square/saw with pulse width and a
   resonant filter, or PCM samples from the ROM), pitch envelope and LFO, amp envelope and the
-  13 partial-pair structures including ring modulation. Macros: level, cutoff, envelope time.
+  13 partial-pair structures including ring modulation. The amp envelope times its segments
+  like the LA32 (by distance, zero levels and the release run to silence) and the pitch LFO
+  uses the firmware's rate table. Macros: level, cutoff, envelope time.
   **IMPORT ROMS** scans a folder (and the .zip files in it), pairs control and PCM ROMs,
   skips versions with identical sound and lists each set as `<set> · A / B / Rhythm`.
 
@@ -63,7 +69,8 @@ The three engines are three **parts** of one sound: **VA** (OSC / MIX with FILTE
 **LOAD VA...** on OSC / MIX, **LOAD / IMPORT** on the FM and LA tabs, or **LOAD...** on the
 MIXER — so a pad, an FM piano and an LA bass can play together. Loading into a part leaves
 the other parts, the MIXER, FX and ARP as they are, and sets the part's level to the
-preset's matched loudness.
+preset's matched loudness. Only the loaded part fades out and back in (its held notes stop);
+the other parts keep playing.
 
 The **MIXER** tab has a strip per part: level fader with meter, pan, **ECHO** and **REVERB**
 sends, **KEY LOW / KEY HIGH** (splits), **ARP** (on: the part plays the ARP's notes, off: the
@@ -91,11 +98,14 @@ wheel and sustain reach both the ARP's notes and the played ones.
 - **SAVE** stores the current sound as a **User** preset (parameters, FX order, DX7 voice,
   LA timbre, ARP pattern) in `%APPDATA%\Pepperwood\Cohesion Synth\Presets` (`.cspreset`);
   the User category in the LIBRARY has **RENAME** and **DELETE** (to the recycle bin), also
-  on right-click.
-- **IMPORT .SYX / IMPORT FOLDER** loads Yamaha DX7 banks (32-voice bulk dumps and single
+  on right-click. Presets can live in **folders**: SAVE picks a folder (or makes a new one),
+  each folder is a category `User · <folder>`, and right-click → **Move to folder** moves a preset.
+- **IMPORT .SYX** loads Yamaha DX7 banks (32-voice bulk dumps and single
   voices). Banks are kept in `%APPDATA%\Pepperwood\Cohesion Synth\SysEx` and appear as
   `DX7 · <bank>` categories; blank slots and duplicates are skipped. Imported voices are
-  loudness-matched when loaded. **REMOVE BANK** (or right-click a bank) takes a bank out of
+  loudness-matched when loaded (averaged over several renders for voices whose operators or
+  LFO run free). A voice whose carrier release level is above 0 sounds on after note-off, as on
+  a DX7; MIDI ALL SOUND OFF stops every voice at once. **REMOVE BANK** (or right-click a bank) takes a bank out of
   the library again; the original files are never touched.
 - New DX7 banks can be assembled with [COHESION — SYSEX](../Cohesion-SysEx/README.md).
 

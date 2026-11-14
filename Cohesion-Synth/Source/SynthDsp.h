@@ -15,10 +15,12 @@
 namespace syn
 {
     // ---- plain per-block parameter snapshot (filled from the APVTS) ----
+    struct UserWavetable;
     struct OscP
     {
         bool  on = false;  int mode = 0, wave = 0, oct = 0, semi = 0, unison = 1;
         float fine = 0, wtpos = 0, detune = 0, pan = 0, level = 0, phase = 0;
+        const UserWavetable* user = nullptr;   // WT bank "User": the oscillator's imported table
     };
 
     struct EnvP   { float a = 5, d = 200, s = 0.7f, r = 200; };
@@ -64,6 +66,7 @@ namespace syn
             int   keyLo = 0, keyHi = 127;
         };
         PartP part[3];
+        bool  partHold[3] { false, false, false };   // a part being reloaded: new notes leave it out
         bool  arpOn = false;   // notes on MIDI channel 2 come from the ARP, channel 1 = played
     };
 
@@ -317,6 +320,72 @@ namespace syn
     };
     inline const Wavetables& wavetables() { static const Wavetables w; return w; }
 
+    // ---- an imported wavetable (WT bank "User") ----
+    // Frames of one cycle each (Serum / Vital: 2048 samples per frame), at most kMaxFrames.
+    // Built like the built-in banks: every frame's spectrum (FFT), cut at 10 mip levels,
+    // equal RMS per frame (a silent frame stays silent). Same memory layout as one bank.
+    struct UserWavetable
+    {
+        static constexpr int N = Wavetables::N, M = Wavetables::M, kMaxFrames = 64;
+        int F = 1;
+        juce::String name;
+        std::vector<float> data;
+        const float* frames() const { return data.data(); }
+
+        // frames: each one cycle, any length (resampled to N)
+        static std::shared_ptr<UserWavetable> build (std::vector<std::vector<float>> in, const juce::String& nm)
+        {
+            if (in.empty()) return nullptr;
+            if ((int) in.size() > kMaxFrames)   // keep kMaxFrames evenly spread frames (first and last kept)
+            {
+                std::vector<std::vector<float>> pick;
+                for (int k = 0; k < kMaxFrames; ++k)
+                    pick.push_back (std::move (in[(size_t) std::lround ((double) k * (double) (in.size() - 1) / (kMaxFrames - 1))]));
+                in.swap (pick);
+            }
+            auto t = std::make_shared<UserWavetable>();
+            t->F = (int) in.size(); t->name = nm;
+            t->data.assign ((size_t) t->F * M * (N + 1), 0.0f);
+            using Cx = Wavetables::Cx;
+            std::vector<Cx> spec ((size_t) N), buf ((size_t) N);
+            for (int f = 0; f < t->F; ++f)
+            {
+                const auto& src = in[(size_t) f];
+                const size_t L = src.size();
+                for (int i = 0; i < N; ++i)   // periodic linear resampling to N
+                {
+                    const double x = (double) i * (double) L / (double) N;
+                    const size_t a = (size_t) x % L, b = (a + 1) % L; const double fr = x - std::floor (x);
+                    spec[(size_t) i] = Cx (L == (size_t) N ? (double) src[(size_t) i] : (double) src[a] + ((double) src[b] - (double) src[a]) * fr, 0.0);
+                }
+                Wavetables::fft (spec, -1);
+                float scale = 0.0f;
+                for (int m = 0; m < M; ++m)
+                {
+                    const int hMax = Wavetables::H >> m;
+                    std::fill (buf.begin(), buf.end(), Cx());
+                    for (int h = 1; h <= hMax && h < N / 2; ++h)
+                    {
+                        buf[(size_t) h] = spec[(size_t) h] / (double) N;
+                        buf[(size_t) (N - h)] = std::conj (buf[(size_t) h]);
+                    }
+                    Wavetables::fft (buf, +1);
+                    if (m == 0)
+                    {
+                        double pk = 1.0e-9, sq = 0.0;
+                        for (auto& c : buf) { pk = juce::jmax (pk, std::abs (c.real())); sq += c.real() * c.real(); }
+                        const double rmsV = std::sqrt (sq / N);
+                        scale = rmsV < 1.0e-5 ? 0.0f : (float) juce::jmin (Wavetables::kRms / rmsV, 2.0 / pk);
+                    }
+                    float* d = t->data.data() + ((size_t) f * M + (size_t) m) * (N + 1);
+                    for (int i = 0; i < N; ++i) d[i] = (float) buf[(size_t) i].real() * scale;
+                    d[N] = d[0];
+                }
+            }
+            return t;
+        }
+    };
+
     // ---- one band-limited oscillator core ----
     struct Core
     {
@@ -371,18 +440,23 @@ namespace syn
             return v;
         }
 
-        // wavetable read: bank `b`, position 0..1 (morph between frames), mip level by pitch
-        float nextWT (int b, float pos, double pm, double mult)
+        // wavetable read: bank `b` (or an imported table), position 0..1 (morph between frames),
+        // mip level by pitch
+        float nextWT (int b, float pos, double pm, double mult, const UserWavetable* user = nullptr)
         {
-            const auto& wt = wavetables();
+            constexpr int M = Wavetables::M, N = Wavetables::N;
+            const float* base; int F;
+            if (user != nullptr && ! user->data.empty()) { base = user->frames(); F = user->F; }
+            else { base = wavetables().table (juce::jlimit (0, Wavetables::B - 1, b), 0, 0); F = Wavetables::F; }
             const double step = inc * mult;
             // highest harmonic that stays below ~0.45 fs -> mip level (each level halves the harmonics)
             const double maxH = 0.45 / juce::jmax (1.0e-9, step);
-            int m = 0; while (m < Wavetables::M - 1 && (double) (Wavetables::H >> m) > maxH) ++m;
-            const float fp = juce::jlimit (0.0f, 1.0f, pos) * (Wavetables::F - 1);
-            const int f0 = juce::jmin (Wavetables::F - 2, (int) fp); const float ft = fp - (float) f0;
-            const float* ta = wt.table (b, f0, m);
-            const float* tb = wt.table (b, f0 + 1, m);
+            int m = 0; while (m < M - 1 && (double) (Wavetables::H >> m) > maxH) ++m;
+            const float fp = juce::jlimit (0.0f, 1.0f, pos) * (float) (F - 1);
+            const int f0 = juce::jlimit (0, juce::jmax (0, F - 2), (int) fp);
+            const int f1 = juce::jmin (F - 1, f0 + 1); const float ft = F > 1 ? fp - (float) f0 : 0.0f;
+            const float* ta = base + ((size_t) f0 * M + (size_t) m) * (N + 1);
+            const float* tb = base + ((size_t) f1 * M + (size_t) m) * (N + 1);
             double t = phase + pm; t -= std::floor (t);
             const double x = t * Wavetables::N; const int i = (int) x; const float fr = (float) (x - i);
             const float va = ta[i] + (ta[i + 1] - ta[i]) * fr;
@@ -434,14 +508,15 @@ namespace syn
         // mult = per-sample frequency multiplier (pitch modulation).
         // lastOut keeps the pre-gain mono signal (used as an FM/ring source).
         // wtPos < 0: VA waveform `wave`; wtPos >= 0: wavetable bank `wave` at that position
-        void render (int wave, double pm, float gain, double mult, float& outL, float& outR, float wtPos = -1.0f)
+        void render (int wave, double pm, float gain, double mult, float& outL, float& outR, float wtPos = -1.0f,
+                     const UserWavetable* user = nullptr)
         {
             const float norm = 1.0f / std::sqrt ((float) n);
             float sumMono = 0.0f;
             for (int k = 0; k < n; ++k)
             {
                 float s = wtPos < 0.0f ? cores[(size_t) k].next (wave, pm, mult)
-                                       : cores[(size_t) k].nextWT (wave, wtPos, pm, mult);
+                                       : cores[(size_t) k].nextWT (wave, wtPos, pm, mult, user);
                 outL += s * gL[(size_t) k] * norm * gain;
                 outR += s * gR[(size_t) k] * norm * gain;
                 sumMono += s;

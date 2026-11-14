@@ -114,7 +114,7 @@ Run this inside a project folder (e.g. `Cohesion-ADT`). A built `.vst3` lands in
 
 ## Versions and the update check
 
-Every app has its own version in [`versions.json`](versions.json) (`"apps": { "synth": "1.4.0", … }`).
+Every app has its own version in [`versions.json`](versions.json) (`"apps": { "synth": "1.5.0", … }`).
 CMake reads it at configure time (`Common/CohesionVersion.cmake`), so it ends up in the plugin's
 ProjectInfo and in the Windows file version of the `.vst3` / `.exe`.
 

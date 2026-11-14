@@ -354,7 +354,10 @@ namespace dx7
     };
 
     // ------------------------------------------------------------------ voice
-    struct Macros { float bright = 0.0f, time = 1.0f, vel = 1.0f; };
+    // lfoClock >= 0: seconds on the shared free-running LFO clock. The DX7 has one LFO for all
+    // voices: without LFO KEY SYNC every note starts at the LFO's current phase (a chord
+    // tremolos in phase). < 0: a random phase.
+    struct Macros { float bright = 0.0f, time = 1.0f, vel = 1.0f; double lfoClock = -1.0; };
 
     class Voice
     {
@@ -399,7 +402,9 @@ namespace dx7
 
             // LFO
             lfoHz = 0.062f * std::exp2 (p.lfoSpeed * 9.6f / 99.0f);
-            if (p.lfoSync || ! started) lfoPhase = p.lfoSync ? 0.0 : rng.nextDouble();
+            if (p.lfoSync)              lfoPhase = 0.0;
+            else if (m.lfoClock >= 0.0) { const double ph = m.lfoClock * (double) lfoHz; lfoPhase = ph - std::floor (ph); }
+            else if (! started)         lfoPhase = rng.nextDouble();
             lfoDelay = p.lfoDelay / 99.0f * 5.0f; lfoTime = 0.0f; sh = rng.nextFloat() * 2.0f - 1.0f;
             ctl = 0; released = false; started = true;
         }

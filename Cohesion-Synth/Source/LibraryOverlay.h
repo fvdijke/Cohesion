@@ -86,9 +86,12 @@ struct LibraryOverlay : juce::Component
             if (catCount[c]++ == 0) (proc.presetIsImported (i) ? imported : factory).add (c);
         }
         factory.sortNatural(); imported.sortNatural();
-        const juce::String user (CohesionSynthAudioProcessor::kUserCategory);
-        factory.removeString (user);
-        factory.insert (0, user);
+        // "User" (always shown) and its folders (also empty ones) right under Init
+        juce::StringArray user { juce::String (CohesionSynthAudioProcessor::kUserCategory) };
+        for (auto& f : CohesionSynthAudioProcessor::userPresetFolders())
+            user.add (CohesionSynthAudioProcessor::userCategoryFor (f));
+        for (auto& u : user) factory.removeString (u);
+        for (int k = user.size() - 1; k >= 0; --k) factory.insert (0, user[k]);
         if (factory.contains ("Init")) { factory.removeString ("Init"); factory.insert (0, "Init"); }
         cats.clear();
         cats.add ("All");
@@ -145,7 +148,7 @@ struct LibraryOverlay : juce::Component
     {
         return row > 0 && cats[row].startsWith (juce::String::fromUTF8 ("DX7 \xc2\xb7 "));
     }
-    bool isUserCategory (int row) const { return row > 0 && cats[row] == CohesionSynthAudioProcessor::kUserCategory; }
+    bool isUserCategory (int row) const { return row > 0 && CohesionSynthAudioProcessor::isUserCategoryName (cats[row]); }
 
     // the User preset a button acts on: the selected row, else the current preset if it is in the list
     int targetUserPreset() const
@@ -161,20 +164,61 @@ struct LibraryOverlay : juce::Component
         if (row < 0 || row >= (int) visible.size() || ! proc.presetIsUser (visible[(size_t) row])) return;
         presetList.selectRow (row);
         const int idx = visible[(size_t) row];
-        juce::PopupMenu m;
+        juce::PopupMenu m, move;
+        const auto folders = CohesionSynthAudioProcessor::userPresetFolders();
+        const auto here = proc.presetUserFolder (idx);
+        move.addItem (100, CohesionSynthAudioProcessor::kUserCategory, here.isNotEmpty(), here.isEmpty());
+        for (int k = 0; k < folders.size(); ++k)
+            move.addItem (101 + k, CohesionSynthAudioProcessor::userCategoryFor (folders[k]), folders[k] != here, folders[k] == here);
+        move.addSeparator();
+        move.addItem (99, "New folder...");
         m.addItem (1, "Rename...");
+        m.addSubMenu ("Move to folder", move);
         m.addItem (2, "Delete");
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetList), [this, idx] (int r)
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&presetList), [this, idx, folders] (int r)
         {
             if (r == 1) renameUserPreset (idx);
             if (r == 2) confirmDeleteUserPreset (idx);
+            if (r == 99) newFolderFor (idx);
+            if (r == 100) moveUserPreset (idx, {});
+            if (r > 100 && r - 101 < folders.size()) moveUserPreset (idx, folders[r - 101]);
         });
+    }
+
+    void moveUserPreset (int idx, const juce::String& folder)
+    {
+        const auto name = proc.presetName (idx);
+        const int res = proc.moveUserPreset (idx, folder);
+        const auto where = CohesionSynthAudioProcessor::userCategoryFor (folder);
+        if (res == CohesionSynthAudioProcessor::kSaveExists) status = where + " already has a preset \"" + name + "\"";
+        else if (res < 0)                                    status = "The preset could not be moved";
+        else                                                 status = "Moved \"" + name + "\" to " + where;
+        userListChanged (res);
+    }
+
+    void newFolderFor (int idx)
+    {
+        auto* w = new juce::AlertWindow ("New folder", "A folder for User presets (a category in the LIBRARY).", juce::MessageBoxIconType::NoIcon, this);
+        w->setLookAndFeel (&getLookAndFeel());
+        w->addTextEditor ("folder", {}, "Folder");
+        w->addButton ("Move", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+        if (auto* te = w->getTextEditor ("folder")) te->setInputRestrictions (48);
+        juce::Component::SafePointer<LibraryOverlay> safe (this);
+        w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w, idx] (int r)
+        {
+            if (r != 1 || safe == nullptr) return;
+            const auto f = CohesionSynthAudioProcessor::legalFolderName (w->getTextEditorContents ("folder"));
+            if (f.isEmpty()) { safe->status = "Please enter a folder name"; safe->repaint(); return; }
+            safe->moveUserPreset (idx, f);
+        }), true);
     }
 
     void userListChanged (int selectIndex)
     {
         rebuildCategories();
-        selectCategory (juce::jmax (0, cats.indexOf (CohesionSynthAudioProcessor::kUserCategory)), true);
+        const auto cat = selectIndex >= 0 ? proc.presetCategory (selectIndex) : juce::String (CohesionSynthAudioProcessor::kUserCategory);
+        selectCategory (juce::jmax (0, cats.indexOf (cat)), true);
         for (size_t k = 0; k < visible.size(); ++k)
             if (visible[k] == selectIndex) { presetList.selectRow ((int) k); break; }
         if (onListChanged) onListChanged();
@@ -433,7 +477,7 @@ struct LibraryOverlay : juce::Component
         if (cur >= 0) row = juce::jmax (0, cats.indexOf (proc.presetCategory (cur)));
         else if (part == pid::kFM || part == pid::kLA)   // nothing loaded yet: the first bank
             for (int c = 1; c < cats.size() && row == 0; ++c)
-                if (cats[c] != CohesionSynthAudioProcessor::kUserCategory) row = c;
+                if (! CohesionSynthAudioProcessor::isUserCategoryName (cats[c])) row = c;
         selectCategory (row, true);
         setVisible (true);
         toFront (true);

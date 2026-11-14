@@ -55,6 +55,9 @@ struct OscPanel : juce::Component
     void setDimmed (bool d) { if (d == dimmed) return; dimmed = d; setPanelDimmed (*this, onBtn, d); updateMode(); }
     juce::ToggleButton onBtn;
     juce::ComboBox modeBox, waveBox, bankBox;
+    juce::TextButton userBtn { "USER" };     // WT: choose / import the oscillator's own wavetable
+    std::function<void (OscPanel&)> onUserMenu;
+    juce::String userName;                     // shown as the bank "User: <name>"
     std::unique_ptr<ButtonAtt> onAtt;
     std::unique_ptr<ComboAtt>  modeAtt, waveAtt, bankAtt;
     juce::OwnedArray<LabeledKnob> knobs;
@@ -76,6 +79,9 @@ struct OscPanel : juce::Component
         bankBox.addItemList (pid::wtBankNames(), 1);
         addChildComponent (bankBox);
         bankAtt = std::make_unique<ComboAtt> (apvts, pid::oscWtBank (i), bankBox);
+        userBtn.setTooltip ("Your own wavetables: choose one for this oscillator, or import a .wav (Serum / Vital: 2048 samples per frame)");
+        userBtn.onClick = [this] { if (onUserMenu) onUserMenu (*this); };
+        addChildComponent (userBtn);
 
         auto add = [&] (const juce::String& id, const juce::String& nm)
         { auto* k = new LabeledKnob (apvts, id, nm); knobs.add (k); addAndMakeVisible (k); };
@@ -90,11 +96,22 @@ struct OscPanel : juce::Component
         updateMode();
     }
 
+    // the bank "User" shows the chosen table's name
+    void setUserName (const juce::String& n)
+    {
+        if (n == userName) return;
+        userName = n;
+        bankBox.changeItemText (pid::kWtUserBank + 1, n.isEmpty() ? juce::String ("User (none)") : "User: " + n);
+        if (bankBox.getSelectedId() == pid::kWtUserBank + 1)
+            bankBox.setText (bankBox.getItemText (pid::kWtUserBank), juce::dontSendNotification);
+    }
+
     void updateMode()
     {
         const bool wt = modeBox.getSelectedId() == 2;
         waveBox.setVisible (! wt);
         bankBox.setVisible (wt);
+        userBtn.setVisible (wt);
         if (knobs.size() > 3) knobs[3]->setAlpha (dimmed ? 0.38f : (wt ? 1.0f : 0.38f));   // WT POS
         repaint();
     }
@@ -121,6 +138,8 @@ struct OscPanel : juce::Component
         modeBox.setBounds (combos.removeFromLeft (combos.getWidth() / 2 - 4));
         combos.removeFromLeft (8);
         waveBox.setBounds (combos);
+        userBtn.setBounds (combos.removeFromRight (44));
+        combos.removeFromRight (4);
         bankBox.setBounds (combos);
         r.removeFromTop (10);
         const int cols = 3, rows = 3;
@@ -339,7 +358,7 @@ public:
     void openSaveDialog();         // SAVE: name the current sound as a User preset
 private:
     void updatePresetName();
-    void saveAs (const juce::String& name, bool overwrite);
+    void saveAs (const juce::String& name, bool overwrite, const juce::String& folder = {});
 
     CohesionSynthAudioProcessor& proc;
     CohesionLookAndFeel lnf;
@@ -357,6 +376,9 @@ private:
     // OSC / MIX tab
     juce::Component oscMix;
     std::unique_ptr<OscPanel>  oscPanels[4];
+    void showUserWavetableMenu (int osc);      // osc 1..4: the USER button's menu
+    void importWavetables (int osc);
+    std::unique_ptr<juce::FileChooser> wtChooser;
     std::unique_ptr<MiniPanel> subPanel, noisePanel;
     std::unique_ptr<MixerPanel> mixer;
 

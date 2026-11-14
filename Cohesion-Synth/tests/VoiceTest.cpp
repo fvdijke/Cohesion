@@ -188,7 +188,7 @@ int main()
                 if (! fin || pk < 0.5f || pk > 2.01f) { tablesOk = false; std::printf ("  bank %d frame %d: peak %.3f\n", b, f, pk); }
             }
         check (tablesOk, "all 12 x 8 wavetable frames are finite, peak 0.5 .. 2");
-        check (pid::wtBankNames().size() == syn::Wavetables::B, "bank names match the banks");
+        check (pid::wtBankNames().size() == syn::Wavetables::B + 1 && pid::kWtUserBank == syn::Wavetables::B, "bank names match the banks (+ User)");
 
         bool allSound = true, allMorph = true;
         for (int b = 0; b < syn::Wavetables::B; ++b)

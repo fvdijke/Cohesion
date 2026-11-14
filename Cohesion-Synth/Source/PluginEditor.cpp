@@ -16,6 +16,9 @@ CohesionSynthAudioProcessorEditor::CohesionSynthAudioProcessorEditor (CohesionSy
     for (int i = 0; i < 4; ++i)
     {
         oscPanels[i] = std::make_unique<OscPanel> (proc.apvts, i + 1);
+        oscPanels[i]->onUserMenu = [this, i] (OscPanel&) { showUserWavetableMenu (i + 1); };
+        oscPanels[i]->userName = "-";   // forces the first setUserName
+        oscPanels[i]->setUserName (proc.oscUserWavetable (i + 1));
         oscMix.addAndMakeVisible (*oscPanels[i]);
     }
     subPanel = std::make_unique<MiniPanel> (proc.apvts, "SUB", pid::subOn, pid::subWave,
@@ -255,29 +258,42 @@ void CohesionSynthAudioProcessorEditor::openSaveDialog()
 {
     const int cur = proc.currentPresetIndex();
     auto* w = new juce::AlertWindow ("Save preset", "Save the current sound as a User preset.\n"
-                                     "It appears in the LIBRARY under \"User\".", juce::MessageBoxIconType::NoIcon, this);
+                                     "It appears in the LIBRARY under \"User\" or the folder you choose.", juce::MessageBoxIconType::NoIcon, this);
     w->setLookAndFeel (&lnf);
     w->addTextEditor ("name", proc.presetName (cur), "Name");
+    // the folder: "User" itself, an existing folder (the current preset's by default), or a new one
+    juce::StringArray folderItems { juce::String (CohesionSynthAudioProcessor::kUserCategory) };
+    const auto folders = CohesionSynthAudioProcessor::userPresetFolders();
+    for (auto& f : folders) folderItems.add (CohesionSynthAudioProcessor::userCategoryFor (f));
+    w->addComboBox ("folder", folderItems, "Folder");
+    if (auto* cb = w->getComboBoxComponent ("folder"))
+        cb->setSelectedItemIndex (juce::jmax (0, folders.indexOf (proc.presetUserFolder (cur)) + 1), juce::dontSendNotification);
+    w->addTextEditor ("newfolder", {}, "or a new folder");
+    if (auto* te = w->getTextEditor ("newfolder")) te->setInputRestrictions (48);
     w->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
     w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
     if (auto* te = w->getTextEditor ("name")) { te->setInputRestrictions (64); te->selectAll(); }
     juce::Component::SafePointer<CohesionSynthAudioProcessorEditor> safe (this);
-    w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w] (int r)
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w, folders] (int r)
     {
         const auto name = w->getTextEditorContents ("name");
-        if (r == 1 && safe != nullptr) safe->saveAs (name, false);
+        juce::String folder = w->getTextEditorContents ("newfolder").trim();
+        if (folder.isEmpty())
+            if (auto* cb = w->getComboBoxComponent ("folder"))
+                if (cb->getSelectedItemIndex() > 0) folder = folders[cb->getSelectedItemIndex() - 1];
+        if (r == 1 && safe != nullptr) safe->saveAs (name, false, folder);
     }), true);
 }
 
-void CohesionSynthAudioProcessorEditor::saveAs (const juce::String& name, bool overwrite)
+void CohesionSynthAudioProcessorEditor::saveAs (const juce::String& name, bool overwrite, const juce::String& folder)
 {
-    const int r = proc.saveUserPreset (name, overwrite);
+    const int r = proc.saveUserPreset (name, overwrite, folder);
     if (r == CohesionSynthAudioProcessor::kSaveExists)
     {
         juce::Component::SafePointer<CohesionSynthAudioProcessorEditor> safe (this);
         juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Save preset",
-            "A User preset \"" + name.trim() + "\" already exists. Replace it?", "Replace", "Cancel", this,
-            juce::ModalCallbackFunction::create ([safe, name] (int ok) { if (ok != 0 && safe != nullptr) safe->saveAs (name, true); }));
+            "A User preset \"" + name.trim() + "\" already exists in " + CohesionSynthAudioProcessor::userCategoryFor (folder) + ". Replace it?", "Replace", "Cancel", this,
+            juce::ModalCallbackFunction::create ([safe, name, folder] (int ok) { if (ok != 0 && safe != nullptr) safe->saveAs (name, true, folder); }));
         return;
     }
     if (r == CohesionSynthAudioProcessor::kSaveBadName)
@@ -302,7 +318,58 @@ void CohesionSynthAudioProcessorEditor::timerCallback()
         midiLed.level *= 0.82f;
     midiLed.repaint();
 
+    for (int i = 0; i < 4; ++i) oscPanels[i]->setUserName (proc.oscUserWavetable (i + 1));
     updateDimming();
+}
+
+void CohesionSynthAudioProcessorEditor::showUserWavetableMenu (int osc)
+{
+    const auto names = CohesionSynthAudioProcessor::userWavetables();
+    const auto cur = proc.oscUserWavetable (osc);
+    juce::PopupMenu m;
+    m.addSectionHeader ("OSC " + juce::String (osc) + " - your wavetables");
+    for (int k = 0; k < names.size(); ++k) m.addItem (1 + k, names[k], true, names[k] == cur);
+    if (names.isEmpty()) m.addItem (-1, "(none imported yet)", false);
+    m.addSeparator();
+    m.addItem (1000, "Import .wav...");
+    m.addItem (1001, "Show the wavetable folder", CohesionSynthAudioProcessor::userWavetableDir().isDirectory());
+    juce::Component::SafePointer<CohesionSynthAudioProcessorEditor> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&oscPanels[osc - 1]->userBtn), [safe, osc, names] (int r)
+    {
+        if (safe == nullptr || r == 0) return;
+        if (r == 1000) { safe->importWavetables (osc); return; }
+        if (r == 1001) { CohesionSynthAudioProcessor::userWavetableDir().revealToUser(); return; }
+        if (r >= 1 && r <= names.size() && ! safe->proc.setOscUserWavetable (osc, names[r - 1]))
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Wavetable",
+                                                    "\"" + names[r - 1] + "\" could not be read.", {}, safe.getComponent());
+    });
+}
+
+void CohesionSynthAudioProcessorEditor::importWavetables (int osc)
+{
+    wtChooser = std::make_unique<juce::FileChooser> ("Import wavetables (.wav, 2048 samples per frame)",
+                                                     LibraryOverlay::lastImportDir ("wt"), "*.wav");
+    juce::Component::SafePointer<CohesionSynthAudioProcessorEditor> safe (this);
+    wtChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles
+                            | juce::FileBrowserComponent::canSelectMultipleItems, [safe, osc] (const juce::FileChooser& fc)
+    {
+        if (safe == nullptr) return;
+        const auto files = fc.getResults();
+        if (files.isEmpty()) return;
+        LibraryOverlay::rememberImportDir ("wt", files.getFirst().getParentDirectory());
+        juce::String first; juce::StringArray failed;
+        for (auto& f : files)
+        {
+            juce::String err;
+            const auto n = safe->proc.importWavetable (f, err);
+            if (n.isEmpty()) failed.add (f.getFileName() + " (" + err + ")");
+            else if (first.isEmpty()) first = n;
+        }
+        if (first.isNotEmpty()) safe->proc.setOscUserWavetable (osc, first);   // the first one plays on this oscillator
+        if (! failed.isEmpty())
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Import wavetables",
+                                                    "Not imported:\n" + failed.joinIntoString ("\n"), {}, safe.getComponent());
+    });
 }
 
 void CohesionSynthAudioProcessorEditor::updateDimming()

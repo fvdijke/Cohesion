@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include <future>
 #include "PluginEditor.h"
 #include <map>
 #include <mutex>
@@ -15,6 +16,8 @@ CohesionSynthAudioProcessor::CohesionSynthAudioProcessor()
         auto* v = new SynthVoice();
         v->setSnapshot (&snapshot);
         v->setGlideSource (&lastNoteHz);
+        v->setRandomSeed (1000 + i);       // each voice its own free-running operator phases
+        v->setLfoClock (&fmLfoClock);
         v->setFmSource (&fmSource);
         v->setLaSource (&laSource);
         synth.addVoice (v);
@@ -277,7 +280,7 @@ void CohesionSynthAudioProcessor::loadPresetIntoPart (int i, int part)
         levelDb = levelFrom (main, drive);
     }
 
-    beginPresetSwitch();
+    beginPartSwitch (part);
     for (auto& kv : values) setParam (kv.first, kv.second);
     if (pr.userFile != juce::File())
     {
@@ -285,6 +288,15 @@ void CohesionSynthAudioProcessor::loadPresetIntoPart (int i, int part)
             apvts.state.setProperty (prop, userTree.getProperty (prop), nullptr);
         if (part == pid::kLA) for (const char* prop : { "laTimbre", "laRom", "laBank" })
             apvts.state.setProperty (prop, userTree.getProperty (prop), nullptr);
+        if (part == pid::kVA)
+        {
+            for (const char* prop : { "wtUser1", "wtUser2", "wtUser3", "wtUser4" })
+            {
+                if (userTree.hasProperty (prop)) apvts.state.setProperty (prop, userTree.getProperty (prop), nullptr);
+                else                             apvts.state.removeProperty (prop, nullptr);
+            }
+            restoreWavetablesFromState();
+        }
         if (part == pid::kFM) restoreFmFromState();
         if (part == pid::kLA) restoreLaFromState();
     }
@@ -302,7 +314,7 @@ void CohesionSynthAudioProcessor::loadPresetIntoPart (int i, int part)
     setParam (pid::partLevel (part), levelDb);
     setPartSoundName (part, presetDisplayName (i));
     apvts.state.setProperty ("multi", true, nullptr);
-    endPresetSwitch();
+    endPartSwitch();
 }
 
 // Renders the current imported voice (as set up by loadPreset) offline, the same way
@@ -323,38 +335,65 @@ std::pair<float, float> CohesionSynthAudioProcessor::measureImportedLevel (bool 
         if (onlyPart != pid::kFM) s.dxOn = false;
         if (onlyPart != pid::kLA) s.laOn = false;
     }
-    juce::Synthesiser sy;
-    for (int k = 0; k < 4; ++k)
+    // A free-running LFO or random operator phases make one render vary (a Brass bank: up to
+    // 4 dB). The level is the mean of several renders with different (fixed) start phases.
+    // Only a voice that varies from note to note needs them: a DX7 voice with OSC KEY SYNC off
+    // (free-running operators) or a free LFO that moves its level / pitch.
+    bool varies = false;
+    if (onlyPart == pid::kFM || (onlyPart < 0 && s.dxOn))
     {
-        auto* v = new SynthVoice();
-        v->setSnapshot (&s); v->setFmSource (&fmSource); v->setLaSource (&laSource);
-        sy.addVoice (v);
+        dx7::Patch fp;
+        { const juce::SpinLock::ScopedLockType sl (fmSource.lock); fp = fmSource.patch; }
+        varies = ! fp.oks || (! fp.lfoSync && (fp.lfoAmd > 0 || fp.lfoPmd > 0)) || fp.lfoWave == 5;
     }
-    sy.addSound (new SynthSound());
-    sy.setCurrentPlaybackSampleRate (sr);
+    const int kRenders = varies ? 5 : 1;
+    auto renderOnce = [&] (int seed) -> float
+    {
+        const std::atomic<double> clock { 0.37 * seed };   // the shared DX7 LFO at a different phase per render
+        juce::Synthesiser sy;
+        for (int k = 0; k < 4; ++k)
+        {
+            auto* v = new SynthVoice();
+            v->setSnapshot (&s); v->setFmSource (&fmSource); v->setLaSource (&laSource);
+            v->setRandomSeed (seed * 7919 + k);
+            v->setLfoClock (&clock);
+            sy.addVoice (v);
+        }
+        sy.addSound (new SynthSound());
+        sy.setCurrentPlaybackSampleRate (sr);
 
-    const std::vector<int> notes = drum ? std::vector<int> { 48 } : std::vector<int> { 48, 52, 55 };
-    const double hold = drum ? 0.3 : 1.5;
-    const int holdS = (int) (hold * sr), total = holdS + (int) (0.3 * sr), bs = 512;
-    juce::AudioBuffer<float> b (2, bs);
-    std::vector<float> mono; mono.reserve ((size_t) total + bs);
-    for (int pos = 0; pos < total; pos += bs)
-    {
-        juce::MidiBuffer m;
-        if (pos == 0) for (int nn : notes) m.addEvent (juce::MidiMessage::noteOn (1, nn, 0.8f), 0);
-        if (pos <= holdS && holdS < pos + bs) for (int nn : notes) m.addEvent (juce::MidiMessage::noteOff (1, nn), holdS - pos);
-        b.clear();
-        sy.renderNextBlock (b, m, 0, bs);
-        for (int i = 0; i < bs; ++i) mono.push_back (0.5f * (b.getSample (0, i) + b.getSample (1, i)));
-    }
-    const int win = (int) ((drum ? 0.05 : 0.3) * sr);
-    float loud = 0.0f;
-    for (int st = 0; st + win <= total; st += (int) (0.025 * sr))
-    {
-        double e = 0; for (int k = 0; k < win; ++k) e += (double) mono[(size_t) (st + k)] * mono[(size_t) (st + k)];
-        loud = juce::jmax (loud, (float) std::sqrt (e / win));
-    }
-    const float loudDb = juce::Decibels::gainToDecibels (loud, -100.0f);
+        const std::vector<int> notes = drum ? std::vector<int> { 48 } : std::vector<int> { 48, 52, 55 };
+        const double hold = drum ? 0.3 : 1.5;
+        const int holdS = (int) (hold * sr), total = holdS + (int) (0.3 * sr), bs = 512;
+        juce::AudioBuffer<float> b (2, bs);
+        std::vector<float> mono; mono.reserve ((size_t) total + bs);
+        for (int pos = 0; pos < total; pos += bs)
+        {
+            juce::MidiBuffer m;
+            if (pos == 0) for (int nn : notes) m.addEvent (juce::MidiMessage::noteOn (1, nn, 0.8f), 0);
+            if (pos <= holdS && holdS < pos + bs) for (int nn : notes) m.addEvent (juce::MidiMessage::noteOff (1, nn), holdS - pos);
+            b.clear();
+            sy.renderNextBlock (b, m, 0, bs);
+            for (int i = 0; i < bs; ++i) mono.push_back (0.5f * (b.getSample (0, i) + b.getSample (1, i)));
+        }
+        const int win = (int) ((drum ? 0.05 : 0.3) * sr);
+        float loud = 0.0f;
+        for (int st = 0; st + win <= total; st += (int) (0.025 * sr))
+        {
+            double e = 0; for (int k = 0; k < win; ++k) e += (double) mono[(size_t) (st + k)] * mono[(size_t) (st + k)];
+            loud = juce::jmax (loud, (float) std::sqrt (e / win));
+        }
+        return juce::Decibels::gainToDecibels (loud, -100.0f);
+    };
+    // the renders are independent: one thread each (the output is muted while this runs)
+    std::vector<std::future<float>> runs;
+    for (int r = 1; r < kRenders; ++r) runs.push_back (std::async (std::launch::async, renderOnce, r + 1));
+    std::vector<float> res { renderOnce (1) };
+    for (auto& f : runs) res.push_back (f.get());
+    double sumDb = 0.0; int nOk = 0;
+    for (float d : res)
+        if (d >= -80.0f && std::isfinite (d)) { sumDb += d; ++nOk; }
+    const float loudDb = nOk > 0 ? (float) (sumDb / nOk) : -100.0f;
     if (loudDb < -80.0f || ! std::isfinite (loudDb)) return { 0.8f, 0.0f };   // silent / odd voice: leave the default
     const float corr = (drum ? -14.0f : -18.0f) - loudDb;                      // measured at MAIN 1, DRIVE 0
     if (corr <= 0.0f) return { juce::jmax (0.05f, juce::Decibels::decibelsToGain (corr)), 0.0f };
@@ -388,6 +427,68 @@ void CohesionSynthAudioProcessor::endPresetSwitch()
 {
     int s = switchState.load();
     if (s == kFadeOut || s == kSilent) switchState.compare_exchange_strong (s, kFadeIn);
+}
+
+void CohesionSynthAudioProcessor::beginPartSwitch (int part)
+{
+    if (part < 0 || part >= pid::kNumParts) return;
+    const bool audioRunning = juce::Time::getMillisecondCounter() - lastBlockMs.load() < 250;
+    if (! audioRunning)
+    {
+        for (int i = 0; i < synth.getNumVoices(); ++i)
+            if (auto* v = dynamic_cast<SynthVoice*> (synth.getVoice (i))) v->silencePart (part);
+        return;
+    }
+    // the VA part's filters / matrix also shape the parts that run through VA FILT+MOD: they dip too
+    bool fade[pid::kNumParts] {};
+    fade[part] = true;
+    if (part == pid::kVA)
+        for (int k = 1; k < pid::kNumParts; ++k) fade[k] = snapshot.part[k].viaFilter;
+    for (int k = 0; k < pid::kNumParts; ++k)
+        if (fade[k]) { partStop[k].store (k == part); partSwitch[k].store (kFadeOut); }
+    for (int t = 0; t < 100; ++t)   // a fade takes ~5 ms + one block
+    {
+        bool all = true;
+        for (int k = 0; k < pid::kNumParts; ++k) all = all && (! fade[k] || partSwitch[k].load() == kSilent);
+        if (all) break;
+        juce::Thread::sleep (1);
+    }
+}
+
+void CohesionSynthAudioProcessor::endPartSwitch()
+{
+    for (auto& ps : partSwitch)
+    {
+        int s = ps.load();
+        if (s == kFadeOut || s == kSilent) ps.compare_exchange_strong (s, kFadeIn);
+    }
+}
+
+void CohesionSynthAudioProcessor::applyPartFades (float* const* pl, float* const* pr, int n)
+{
+    const float step = (float) (1.0 / (0.005 * sampleRateHz));   // 5 ms
+    for (int k = 0; k < pid::kNumParts; ++k)
+    {
+        const int st = partSwitch[k].load();
+        if (st == kRun && partFade[k] >= 1.0f) continue;
+        if (st == kSilent) { partFade[k] = 0.0f; juce::FloatVectorOperations::clear (pl[k], n); juce::FloatVectorOperations::clear (pr[k], n); continue; }
+        for (int i = 0; i < n; ++i)
+        {
+            partFade[k] = (st == kFadeOut) ? juce::jmax (0.0f, partFade[k] - step) : juce::jmin (1.0f, partFade[k] + step);
+            pl[k][i] *= partFade[k]; pr[k][i] *= partFade[k];
+        }
+        if (st == kFadeOut && partFade[k] <= 0.0f)
+        {
+            if (partStop[k].load())
+                for (int i = 0; i < synth.getNumVoices(); ++i)
+                    if (auto* v = dynamic_cast<SynthVoice*> (synth.getVoice (i))) v->silencePart (k);
+            int s = kFadeOut; partSwitch[k].compare_exchange_strong (s, kSilent);
+        }
+        else if (st == kFadeIn && partFade[k] >= 1.0f)
+        {
+            int s = kFadeIn; partSwitch[k].compare_exchange_strong (s, kRun);
+        }
+    }
 }
 
 void CohesionSynthAudioProcessor::applySwitchFade (juce::AudioBuffer<float>& buffer, int n)
@@ -575,10 +676,48 @@ static int userPresetParts (const juce::File& f)
     return (va ? 1 << pid::kVA : 0) | (on (pid::dxOn) ? 1 << pid::kFM : 0) | (on (pid::laOn) ? 1 << pid::kLA : 0);
 }
 
-bool CohesionSynthAudioProcessor::userPresetExists (const juce::String& name) const
+juce::String CohesionSynthAudioProcessor::legalFolderName (const juce::String& raw)
+{
+    return juce::File::createLegalFileName (raw.trim()).trim().substring (0, 48);
+}
+
+juce::String CohesionSynthAudioProcessor::userCategoryFor (const juce::String& folder)
+{
+    const auto f = legalFolderName (folder);
+    return f.isEmpty() ? juce::String (kUserCategory) : juce::String (kUserCategory) + juce::String::fromUTF8 (" \xc2\xb7 ") + f;
+}
+
+bool CohesionSynthAudioProcessor::isUserCategoryName (const juce::String& c)
+{
+    return c == kUserCategory || c.startsWith (juce::String (kUserCategory) + juce::String::fromUTF8 (" \xc2\xb7 "));
+}
+
+juce::StringArray CohesionSynthAudioProcessor::userPresetFolders()
+{
+    juce::StringArray out;
+    for (auto& d : userPresetDir().findChildFiles (juce::File::findDirectories, false))
+        if (! d.isHidden()) out.add (d.getFileName());
+    out.sortNatural();
+    return out;
+}
+
+juce::String CohesionSynthAudioProcessor::presetUserFolder (int i) const
+{
+    if (! presetIsUser (i)) return {};
+    const auto parent = presets[(size_t) i].userFile.getParentDirectory();
+    return parent == userPresetDir() ? juce::String() : parent.getFileName();
+}
+
+static juce::File userFolderDir (const juce::String& folder)
+{
+    const auto f = CohesionSynthAudioProcessor::legalFolderName (folder);
+    return f.isEmpty() ? CohesionSynthAudioProcessor::userPresetDir() : CohesionSynthAudioProcessor::userPresetDir().getChildFile (f);
+}
+
+bool CohesionSynthAudioProcessor::userPresetExists (const juce::String& name, const juce::String& folder) const
 {
     const auto n = legalPresetName (name);
-    return n.isNotEmpty() && userPresetDir().getChildFile (n + kPresetExt).existsAsFile();
+    return n.isNotEmpty() && userFolderDir (folder).getChildFile (n + kPresetExt).existsAsFile();
 }
 
 void CohesionSynthAudioProcessor::loadUserPresets()
@@ -588,18 +727,25 @@ void CohesionSynthAudioProcessor::loadUserPresets()
 
     presets.erase (std::remove_if (presets.begin(), presets.end(), [] (const SynthPreset& p) { return p.userFile != juce::File(); }),
                    presets.end());
+    // the presets directly in the folder ("User"), then one category per subfolder ("User · Pads")
     const auto dir = userPresetDir();
     if (dir.isDirectory())
     {
-        auto files = dir.findChildFiles (juce::File::findFiles, false, juce::String ("*") + kPresetExt);
-        std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b)
-                   { return a.getFileNameWithoutExtension().compareNatural (b.getFileNameWithoutExtension()) < 0; });
-        for (auto& f : files)
+        juce::StringArray folders { juce::String() };
+        folders.addArray (userPresetFolders());
+        for (auto& folder : folders)
         {
-            SynthPreset p { f.getFileNameWithoutExtension(), kUserCategory, {}, nullptr };
-            p.userFile = f;
-            p.userParts = userPresetParts (f);
-            presets.push_back (std::move (p));
+            const auto d = folder.isEmpty() ? dir : dir.getChildFile (folder);
+            auto files = d.findChildFiles (juce::File::findFiles, false, juce::String ("*") + kPresetExt);
+            std::sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b)
+                       { return a.getFileNameWithoutExtension().compareNatural (b.getFileNameWithoutExtension()) < 0; });
+            for (auto& f : files)
+            {
+                SynthPreset p { f.getFileNameWithoutExtension(), userCategoryFor (folder), {}, nullptr };
+                p.userFile = f;
+                p.userParts = userPresetParts (f);
+                presets.push_back (std::move (p));
+            }
         }
     }
     importedLevels.clear();   // indices after the user presets may have shifted
@@ -623,7 +769,7 @@ bool CohesionSynthAudioProcessor::applyUserPreset (const juce::File& f)
             rp->setValueNotifyingHost (storedValue (child, v) ? rp->convertTo0to1 (v) : rp->getDefaultValue());
         }
     for (const char* prop : { "fxOrder", "dxVoice", "dxBank", "laTimbre", "laRom", "laBank", "arpPattern",
-                              "partName1", "partName2", "partName3", "multi" })
+                              "partName1", "partName2", "partName3", "multi", "wtUser1", "wtUser2", "wtUser3", "wtUser4" })
     {
         if (tree.hasProperty (prop)) apvts.state.setProperty (prop, tree.getProperty (prop), nullptr);
         else                         apvts.state.removeProperty (prop, nullptr);
@@ -631,15 +777,16 @@ bool CohesionSynthAudioProcessor::applyUserPreset (const juce::File& f)
     syncFxOrderFromState();
     restoreFmFromState();
     restoreLaFromState();
+    restoreWavetablesFromState();
     apvts.state.setProperty ("multi", false, nullptr);   // the header shows the User preset's name
     return true;
 }
 
-int CohesionSynthAudioProcessor::saveUserPreset (const juce::String& rawName, bool overwrite)
+int CohesionSynthAudioProcessor::saveUserPreset (const juce::String& rawName, bool overwrite, const juce::String& folder)
 {
     const auto name = legalPresetName (rawName);
     if (name.isEmpty()) return kSaveBadName;
-    const auto dir = userPresetDir();
+    const auto dir = userFolderDir (folder);
     if (! dir.createDirectory()) return kSaveFailed;
     const auto f = dir.getChildFile (name + kPresetExt);
     if (f.existsAsFile() && ! overwrite) return kSaveExists;
@@ -681,6 +828,23 @@ int CohesionSynthAudioProcessor::renameUserPreset (int i, const juce::String& ne
         if (! from.moveFileTo (hop) || ! hop.moveFileTo (to)) return kSaveFailed;
     }
     else if (! from.moveFileTo (to)) return kSaveFailed;
+    const bool wasCurrent = (i == presetIndex);
+    loadUserPresets();
+    for (int k = 0; k < (int) presets.size(); ++k)
+        if (presets[(size_t) k].userFile == to) { if (wasCurrent) { presetIndex = k; markCurrentPreset(); } return k; }
+    return kSaveFailed;
+}
+
+int CohesionSynthAudioProcessor::moveUserPreset (int i, const juce::String& folder)
+{
+    if (! presetIsUser (i)) return kSaveFailed;
+    const auto from = presets[(size_t) i].userFile;
+    const auto dir = userFolderDir (folder);
+    if (dir == from.getParentDirectory()) return i;
+    if (! dir.createDirectory()) return kSaveFailed;
+    const auto to = dir.getChildFile (from.getFileName());
+    if (to.existsAsFile()) return kSaveExists;
+    if (! from.moveFileTo (to)) return kSaveFailed;
     const bool wasCurrent = (i == presetIndex);
     loadUserPresets();
     for (int k = 0; k < (int) presets.size(); ++k)
@@ -888,6 +1052,10 @@ void CohesionSynthAudioProcessor::fillSnapshot (syn::Snapshot& out)
         o.wave   = ip (pid::oscWave (n));
         const int bank = ip (pid::oscWtBank (n));
         if (o.mode == 1) o.wave = bank;   // WT: the oscillator renders wavetable bank `wave`
+        {
+            const juce::SpinLock::ScopedLockType sl (wtLock);
+            o.user = (o.mode == 1 && bank == pid::kWtUserBank) ? oscWt[n - 1].get() : nullptr;
+        }
         o.oct    = ip (pid::oscOct (n));
         o.semi   = ip (pid::oscSemi (n));
         o.fine   = f  (pid::oscFine (n));
@@ -983,6 +1151,7 @@ void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     buffer.clear();
     const int n = buffer.getNumSamples();
     lastBlockMs.store (juce::Time::getMillisecondCounter());
+    blockCounter.fetch_add (1);
     if (switchState.load() == kSilent) { midi.clear(); switchGain = 0.0f; return; }   // a new preset is being applied
 
     for (const auto meta : midi)
@@ -1010,6 +1179,11 @@ void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     // every part takes one of the two (MIXER: ARP switch per part).
     updateArpParams();
     updateSnapshot();
+    for (int k = 0; k < pid::kNumParts; ++k)   // a part being reloaded takes no new notes
+    {
+        const int ps = partSwitch[k].load();
+        snapshot.partHold[k] = ps == kFadeOut || ps == kSilent;
+    }
     bool partActive[pid::kNumParts];
     partActive[pid::kVA] = snapshot.osc[0].on || snapshot.osc[1].on || snapshot.osc[2].on || snapshot.osc[3].on
                            || snapshot.subOn || snapshot.noiseOn;
@@ -1047,7 +1221,7 @@ void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     snapshot.arpOn = arpp.on;
 
     snapshot.glideMs = juce::jmax (arpp.on ? arpp.slide * 300.0f : 0.0f, snapshot.glideMs);   // arp SLIDE or GLIDE
-    synth.mode = snapshot.voiceMode;
+    synth.setMode (snapshot.voiceMode);
     snapshot.bpm = fxp.bpm;
     // shared (MONO) LFOs: one free-running LFO per slot, rendered for this block
     for (int i = 0; i < 4; ++i)
@@ -1064,6 +1238,12 @@ void CohesionSynthAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer
     if (partBuf.getNumSamples() < n) partBuf.setSize (2 * pid::kNumParts, n, false, false, true);
     for (int c = 0; c < 2 * pid::kNumParts; ++c) partBuf.clear (c, 0, n);
     synth.renderNextBlock (partBuf, midi, 0, n);
+    fmLfoClock.store (std::fmod (fmLfoClock.load() + n / sampleRateHz, 3600.0));
+    {
+        float* fl[pid::kNumParts]; float* fr[pid::kNumParts];
+        for (int k = 0; k < pid::kNumParts; ++k) { fl[k] = partBuf.getWritePointer (2 * k); fr[k] = partBuf.getWritePointer (2 * k + 1); }
+        applyPartFades (fl, fr, n);
+    }
 
     // --- MIXER: level, pan, mute / solo per part (ramped over the block) ---
     bool anySolo = false;
@@ -1155,7 +1335,150 @@ void CohesionSynthAudioProcessor::setStateInformation (const void* data, int siz
             syncFxOrderFromState();
             restoreFmFromState();
             restoreLaFromState();
+            restoreWavetablesFromState();
         }
+}
+
+// ---------------------------------------------------------------------------
+//  Imported wavetables
+// ---------------------------------------------------------------------------
+juce::File CohesionSynthAudioProcessor::userWavetableDir()
+{
+    // tests redirect the folder; normal use: %APPDATA%/Pepperwood/Cohesion Synth/Wavetables
+    const auto overrideDir = juce::SystemStats::getEnvironmentVariable ("COHESION_SYNTH_WT_DIR", {});
+    if (overrideDir.isNotEmpty()) return juce::File (overrideDir);
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("Pepperwood").getChildFile ("Cohesion Synth").getChildFile ("Wavetables");
+}
+
+juce::StringArray CohesionSynthAudioProcessor::userWavetables()
+{
+    juce::StringArray out;
+    for (auto& f : userWavetableDir().findChildFiles (juce::File::findFiles, false, "*.wav"))
+        out.add (f.getFileNameWithoutExtension());
+    out.sortNatural();
+    return out;
+}
+
+// The frame size of a wavetable .wav: the "clm " chunk Serum writes ("<!>2048 ..."), else 2048.
+static int wavFrameSize (const juce::File& f)
+{
+    juce::MemoryBlock mb;
+    if (! f.loadFileAsData (mb) || mb.getSize() < 12) return 2048;
+    const auto* d = static_cast<const char*> (mb.getData());
+    size_t pos = 12;
+    while (pos + 8 <= mb.getSize())
+    {
+        const juce::String id (d + pos, 4);
+        const auto len = (size_t) juce::ByteOrder::littleEndianInt (d + pos + 4);
+        if (id == "clm " && pos + 8 + len <= mb.getSize())
+        {
+            const juce::String txt (d + pos + 8, juce::jmin<size_t> (len, 64));
+            const int n = txt.fromFirstOccurrenceOf ("<!>", false, false).getIntValue();
+            if (n >= 16 && n <= 65536) return n;
+        }
+        pos += 8 + len + (len & 1);
+    }
+    return 2048;
+}
+
+std::shared_ptr<syn::UserWavetable> CohesionSynthAudioProcessor::loadWavetableFile (const juce::File& wav, juce::String* error)
+{
+    auto fail = [error] (const juce::String& e) { if (error != nullptr) *error = e; return std::shared_ptr<syn::UserWavetable>(); };
+    juce::WavAudioFormat fmt;
+    std::unique_ptr<juce::AudioFormatReader> rd (fmt.createReaderFor (wav.createInputStream().release(), true));
+    if (rd == nullptr) return fail ("not a readable .wav file");
+    const auto len = (int) juce::jmin<juce::int64> (rd->lengthInSamples, 64 * 1024 * 1024 / 4);
+    if (len < 16) return fail ("too short");
+    juce::AudioBuffer<float> b ((int) rd->numChannels, len);
+    rd->read (&b, 0, len, 0, true, true);
+    std::vector<float> mono ((size_t) len, 0.0f);
+    for (int c = 0; c < b.getNumChannels(); ++c)
+        for (int i = 0; i < len; ++i) mono[(size_t) i] += b.getSample (c, i) / (float) b.getNumChannels();
+
+    // frames: the file's frame size; a file shorter than two frames is one single cycle
+    int fs = wavFrameSize (wav);
+    if (len < 2 * fs) fs = len;
+    const int nFrames = len / fs;
+    std::vector<std::vector<float>> frames;
+    for (int k = 0; k < nFrames; ++k) frames.emplace_back (mono.begin() + (size_t) k * fs, mono.begin() + (size_t) (k + 1) * fs);
+    auto t = syn::UserWavetable::build (std::move (frames), wav.getFileNameWithoutExtension());
+    if (t == nullptr) return fail ("no frames");
+    return t;
+}
+
+juce::String CohesionSynthAudioProcessor::importWavetable (const juce::File& wav, juce::String& error)
+{
+    if (loadWavetableFile (wav, &error) == nullptr) return {};
+    const auto dir = userWavetableDir();
+    if (! dir.createDirectory()) { error = "the wavetable folder could not be made"; return {}; }
+    auto dest = dir.getChildFile (juce::File::createLegalFileName (wav.getFileName()));
+    if (dest.existsAsFile())
+    {
+        juce::MemoryBlock a, b;
+        if (dest.loadFileAsData (a) && wav.loadFileAsData (b) && a == b) return dest.getFileNameWithoutExtension();   // already imported
+        dest = dest.getNonexistentSibling (true);
+    }
+    if (! wav.copyFileTo (dest)) { error = "the file could not be copied"; return {}; }
+    return dest.getFileNameWithoutExtension();
+}
+
+bool CohesionSynthAudioProcessor::setOscUserWavetable (int osc, const juce::String& name)
+{
+    if (osc < 1 || osc > 4) return false;
+    std::shared_ptr<const syn::UserWavetable> t;
+    if (name.isNotEmpty())
+    {
+        t = loadWavetableFile (userWavetableDir().getChildFile (name + ".wav"));
+        if (t == nullptr) return false;
+    }
+    std::shared_ptr<const syn::UserWavetable> old;
+    {
+        const juce::SpinLock::ScopedLockType sl (wtLock);
+        old = std::move (oscWt[osc - 1]);
+        oscWt[osc - 1] = t;
+    }
+    // the previous table may still be in this block's snapshot: freed after the next blocks
+    const bool audioRunning = juce::Time::getMillisecondCounter() - lastBlockMs.load() < 250;
+    const auto now = blockCounter.load();
+    retiredWt.erase (std::remove_if (retiredWt.begin(), retiredWt.end(),
+                                     [&] (const auto& r) { return ! audioRunning || now > r.second + 2; }), retiredWt.end());
+    if (old != nullptr && audioRunning) retiredWt.emplace_back (std::move (old), now);
+    const auto prop = "wtUser" + juce::String (osc);
+    if (name.isEmpty()) apvts.state.removeProperty (prop, nullptr);
+    else
+    {
+        apvts.state.setProperty (prop, name, nullptr);
+        setParam (pid::oscWtBank (osc), (float) pid::kWtUserBank);
+        setParam (pid::oscMode (osc), 1.0f);
+    }
+    return true;
+}
+
+juce::String CohesionSynthAudioProcessor::oscUserWavetable (int osc) const
+{
+    return (osc >= 1 && osc <= 4) ? apvts.state.getProperty ("wtUser" + juce::String (osc)).toString() : juce::String();
+}
+
+int CohesionSynthAudioProcessor::oscUserWavetableFrames (int osc) const
+{
+    if (osc < 1 || osc > 4) return 0;
+    const juce::SpinLock::ScopedLockType sl (const_cast<juce::SpinLock&> (wtLock));
+    return oscWt[osc - 1] != nullptr ? oscWt[osc - 1]->F : 0;
+}
+
+// the oscillators' imported tables after a project / preset load (a missing file: none)
+void CohesionSynthAudioProcessor::restoreWavetablesFromState()
+{
+    for (int o = 1; o <= 4; ++o)
+    {
+        const auto name = oscUserWavetable (o);
+        std::shared_ptr<const syn::UserWavetable> t;
+        if (name.isNotEmpty()) t = loadWavetableFile (userWavetableDir().getChildFile (name + ".wav"));
+        const juce::SpinLock::ScopedLockType sl (wtLock);
+        if (oscWt[o - 1] != nullptr) retiredWt.emplace_back (oscWt[o - 1], blockCounter.load());
+        oscWt[o - 1] = t;
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

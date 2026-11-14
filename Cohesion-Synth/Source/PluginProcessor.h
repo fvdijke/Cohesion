@@ -94,10 +94,17 @@ public:
     static constexpr const char* kUserCategory = "User";
     bool presetIsUser (int i) const { return i >= 0 && i < (int) presets.size() && presets[(size_t) i].userFile != juce::File(); }
     juce::File presetUserFile (int i) const { return presetIsUser (i) ? presets[(size_t) i].userFile : juce::File(); }
-    bool userPresetExists (const juce::String& name) const;
+    bool userPresetExists (const juce::String& name, const juce::String& folder = {}) const;
+    // User presets in folders: a subfolder of userPresetDir() is the category "User · <folder>"
+    static juce::String userCategoryFor (const juce::String& folder);
+    static bool isUserCategoryName (const juce::String& category);
+    static juce::StringArray userPresetFolders();                   // the subfolders, A-Z
+    static juce::String legalFolderName (const juce::String& raw);
+    juce::String presetUserFolder (int i) const;                   // "" = directly in "User"
+    int  moveUserPreset (int i, const juce::String& folder);        // new index or kSave*
     enum { kSaveExists = -1, kSaveBadName = -2, kSaveFailed = -3 };
     // Saves the current sound; returns its preset index (now the current preset) or kSave*.
-    int  saveUserPreset (const juce::String& name, bool overwrite);
+    int  saveUserPreset (const juce::String& name, bool overwrite, const juce::String& folder = {});
     int  renameUserPreset (int i, const juce::String& newName);   // new index or kSave*
     bool deleteUserPreset (int i);                                  // moved to the recycle bin
 
@@ -131,6 +138,15 @@ public:
     void  setFxOrder (const int* in5);          // message thread; stored in the plugin state
     float getCompGainReductionDb() const        { return fxChain.compGrDb(); }
     // MIXER meters: peak of each part since the last call (post fader)
+    // --- imported wavetables (WT bank "User"): .wav files (Serum / Vital: 2048 samples per
+    //     frame) copied into userWavetableDir(); each oscillator plays one (state "wtUser<n>") ---
+    static juce::File userWavetableDir();
+    static juce::StringArray userWavetables();                                  // names, A-Z
+    juce::String importWavetable (const juce::File& wav, juce::String& error);   // its name, "" on error
+    bool setOscUserWavetable (int osc, const juce::String& name);                // osc 1..4; also selects bank "User"
+    juce::String oscUserWavetable (int osc) const;                               // "" = none
+    int  oscUserWavetableFrames (int osc) const;
+    static std::shared_ptr<syn::UserWavetable> loadWavetableFile (const juce::File& wav, juce::String* error = nullptr);
     float takePartPeak (int part)               { return partPeak[juce::jlimit (0, 2, part)].exchange (0.0f); }
     double getFxBpm() const                     { return fxBpm.load(); }
     arp::Engine& getArp()                       { return arpEngine; }
@@ -143,6 +159,7 @@ private:
     std::pair<float, float> measureImportedLevel (bool drum, int onlyPart = -1);   // { MAIN, limiter DRIVE dB }
     std::pair<float, float> importedLevel (int presetIndex);                    // measured once per voice
     void setPartSoundName (int part, const juce::String& name);
+
     void setParam (const juce::String& id, float value);
     void updateFxParams();
     void syncFxOrderFromState();
@@ -157,13 +174,24 @@ private:
     void restoreLaFromState();
     void beginPresetSwitch();
     void endPresetSwitch();
+    // one part reloaded (MIXER / LOAD): only that part fades out and back in; its voices stop,
+    // the other parts keep playing. With the VA part, parts through VA FILT+MOD dip with it.
+    void beginPartSwitch (int part);
+    void endPartSwitch();
+    void applyPartFades (float* const* pl, float* const* pr, int n);
     void hardStopVoices();
     void handleAsyncUpdate() override;            // MIDI program change -> GM preset (message thread)
     std::atomic<int> pendingProgram { -1 };
     int gmFirst = -1;                              // index of "001 Acoustic Grand Piano"
     void applySwitchFade (juce::AudioBuffer<float>& buffer, int n);
 
+    void restoreWavetablesFromState();
+    juce::SpinLock wtLock;
+    std::shared_ptr<const syn::UserWavetable> oscWt[4];             // the audio thread copies the pointers per block
+    std::vector<std::pair<std::shared_ptr<const syn::UserWavetable>, juce::uint32>> retiredWt;   // freed once no block uses them
+    std::atomic<juce::uint32> blockCounter { 0 };
     FmSource fmSource;
+    std::atomic<double> fmLfoClock { 0.0 };          // the DX7's free-running LFO clock (seconds of audio)
     LaSource laSource;
     std::atomic<int> laVersion { 0 };
     juce::String laBank;
@@ -203,6 +231,9 @@ private:
     std::atomic<int> switchState { kRun };
     std::atomic<juce::uint32> lastBlockMs { 0 };
     float switchGain = 1.0f;
+    std::atomic<int> partSwitch[3] { { kRun }, { kRun }, { kRun } };
+    std::atomic<bool> partStop[3] { { false }, { false }, { false } };   // stop that part's voices when silent
+    float partFade[3] { 1.0f, 1.0f, 1.0f };
     double sampleRateHz = 44100.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CohesionSynthAudioProcessor)
